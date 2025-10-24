@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: pce-freshers-gate
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app"
+    plan: free
+    envVars:
+      - key: GOOGLE_SHEET_ID
+        value: "YOUR_SHEET_ID_HERE"
+      - key: GOOGLE_CREDENTIALS
+        value: "YOUR_SERVICE_ACCOUNT_JSON_BASE64"
+
+
