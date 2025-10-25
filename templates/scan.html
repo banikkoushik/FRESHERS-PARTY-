@@ -1,0 +1,260 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="scan-container">
+    <div class="card">
+        <div class="scan-header">
+            <h2>QR Code Scanner</h2>
+            <div class="coordinator-badge">
+                👤 Coordinator: <strong>{{ coordinator_name }}</strong>
+            </div>
+        </div>
+
+        <div class="manual-input-section">
+            <h3>📝 Manual QR Input</h3>
+            <p class="section-description">Enter QR code manually if camera is not working</p>
+            <div class="manual-input">
+                <input type="text" id="manualQrInput" placeholder="Paste or type QR code here...">
+                <button onclick="submitManualQR()" class="btn btn-secondary">Submit QR</button>
+            </div>
+        </div>
+
+        <div class="scanner-section">
+            <h3>📷 Camera Scanner</h3>
+            <p class="section-description">Point camera at QR code to scan automatically</p>
+            <div id="qr-reader" class="qr-reader-container"></div>
+            <div class="scanner-controls">
+                <button onclick="stopScanner()" class="btn btn-warning">Stop Camera</button>
+                <button onclick="initializeQRScanner()" class="btn btn-info">Restart Camera</button>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h4>💡 Instructions:</h4>
+            <ul>
+                <li>Ensure good lighting for better scanning</li>
+                <li>Hold the QR code steady in front of the camera</li>
+                <li>Use manual input if camera is not available</li>
+                <li>Each QR code can only be used once</li>
+            </ul>
+        </div>
+
+        <div class="logout-section">
+            <a href="/login" class="btn btn-outline">Logout</a>
+        </div>
+    </div>
+</div>
+
+<style>
+.scan-container {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.scan-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.scan-header h2 {
+    color: #2d3748;
+    margin: 0;
+}
+
+.coordinator-badge {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.manual-input-section,
+.scanner-section {
+    margin-bottom: 30px;
+    padding: 25px;
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.manual-input-section h3,
+.scanner-section h3 {
+    color: #2d3748;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.section-description {
+    color: #718096;
+    margin-bottom: 15px;
+    font-size: 14px;
+}
+
+.manual-input {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.manual-input input {
+    flex: 1;
+    padding: 12px 16px;
+    border: 2px solid #cbd5e0;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+.manual-input input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.qr-reader-container {
+    border: 2px dashed #cbd5e0;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+    background: white;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.scanner-controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-secondary {
+    background: #718096;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #4a5568;
+    transform: translateY(-1px);
+}
+
+.btn-warning {
+    background: #ed8936;
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #dd6b20;
+    transform: translateY(-1px);
+}
+
+.btn-info {
+    background: #4299e1;
+    color: white;
+}
+
+.btn-info:hover {
+    background: #3182ce;
+    transform: translateY(-1px);
+}
+
+.btn-outline {
+    background: transparent;
+    color: #718096;
+    border: 2px solid #cbd5e0;
+}
+
+.btn-outline:hover {
+    background: #718096;
+    color: white;
+    transform: translateY(-1px);
+}
+
+.instructions {
+    background: #fffaf0;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 4px solid #ed8936;
+    margin: 25px 0;
+}
+
+.instructions h4 {
+    color: #744210;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.instructions ul {
+    color: #744210;
+    padding-left: 20px;
+    margin: 0;
+}
+
+.instructions li {
+    margin-bottom: 5px;
+}
+
+.logout-section {
+    text-align: center;
+    padding-top: 20px;
+    border-top: 1px solid #e2e8f0;
+}
+
+@media (max-width: 768px) {
+    .scan-header {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+    
+    .manual-input {
+        flex-direction: column;
+    }
+    
+    .manual-input input {
+        width: 100%;
+    }
+    
+    .scanner-controls {
+        flex-direction: column;
+    }
+    
+    .scanner-controls .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .qr-reader-container {
+        padding: 10px;
+        min-height: 250px;
+    }
+}
+</style>
+{% endblock %}
