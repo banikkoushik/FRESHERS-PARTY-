@@ -5,6 +5,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -14,21 +15,25 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive.file'
 ]
 
-# Expected column headers (exact matches)
-EXPECTED_COLUMNS = [
-    'StudentID', 'StudentName', 'ClassRollNo', 'AdmissionDate', 'Section', 
-    'Group', 'Email', 'Mobile', 'FatherName', 'FoodPreference', 'Photo', 
-    'QRCode', 'Status', 'Comment', 'LastCheckedTime', 'Coordinator', 'Used'
-]
-
-# Common variants for column headers (for graceful handling)
-COLUMN_VARIANTS = {
-    'StudentID': ['Student ID', 'StudentID', 'ID'],
-    'StudentName': ['Student Name', 'StudentName', 'Name'],
-    'QRCode': ['QR Code', 'QRCode', 'QR', 'QR String', 'QRValue', 'M'],
-    'Used': ['Used', 'Scanned', 'Checked'],
-    'Coordinator': ['Coordinator', 'Checked By', 'Verified By'],
-    'LastCheckedTime': ['Last Checked Time', 'Timestamp', 'Checked Time']
+# Column mapping by position (A=1, B=2, C=3, etc.)
+COLUMN_MAPPING = {
+    'StudentID': 1,      # Column A
+    'StudentName': 2,    # Column B  
+    'ClassRollNo': 3,    # Column C
+    'AdmissionDate': 4,  # Column D
+    'Section': 5,        # Column E
+    'Group': 6,          # Column F
+    'Email': 7,          # Column G
+    'Mobile': 8,         # Column H
+    'FatherName': 9,     # Column I
+    'FoodPreference': 10, # Column J
+    'Photo': 11,         # Column K
+    'QRCode': 12,        # Column L (or M? Let's check both)
+    'Status': 13,        # Column M (or N?)
+    'Comment': 14,       # Column N (or O?)
+    'LastCheckedTime': 15, # Column O (or P?)
+    'Coordinator': 16,   # Column P (or Q?)
+    'Used': 17           # Column Q (or R?)
 }
 
 def decode_credentials():
@@ -38,346 +43,236 @@ def decode_credentials():
         if not encoded_creds:
             raise ValueError("GOOGLE_CREDENTIALS environment variable not set")
         
+        logger.info("Starting credential decoding...")
+        
         # Decode base64 credentials
         creds_json = base64.b64decode(encoded_creds).decode('utf-8')
         creds_dict = json.loads(creds_json)
         
+        logger.info("Credentials decoded successfully")
+        logger.info(f"Service account: {creds_dict.get('client_email', 'Unknown')}")
+        
         return Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     except Exception as e:
-        logger.error(f"Error decoding credentials: {str(e)}")
+        logger.error(f"❌ Error decoding credentials: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise
 
 def get_sheet():
     """Get Google Sheet worksheet object"""
     try:
+        logger.info("Attempting to authenticate with Google Sheets...")
+        
         creds = decode_credentials()
         client = gspread.authorize(creds)
+        
+        logger.info("Successfully authenticated with Google Sheets API")
         
         sheet_id = os.environ.get('GOOGLE_SHEET_ID')
         if not sheet_id:
             raise ValueError("GOOGLE_SHEET_ID environment variable not set")
         
+        logger.info(f"Attempting to open sheet with ID: {sheet_id}")
+        
         spreadsheet = client.open_by_key(sheet_id)
         worksheet = spreadsheet.sheet1  # Use the first worksheet
         
-        logger.info("Successfully connected to Google Sheet")
+        logger.info("✅ Successfully connected to Google Sheet")
+        logger.info(f"Sheet title: {worksheet.title}")
+        
         return worksheet
         
     except gspread.exceptions.APIError as e:
-        logger.error(f"Google API Error: {str(e)}")
+        logger.error(f"❌ Google API Error: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise
+    except gspread.exceptions.SpreadsheetNotFound:
+        logger.error("❌ Spreadsheet not found. Check GOOGLE_SHEET_ID and sharing permissions.")
         raise
     except Exception as e:
-        logger.error(f"Error accessing Google Sheet: {str(e)}")
+        logger.error(f"❌ Error accessing Google Sheet: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise
 
-def ensure_columns(worksheet):
-    """Ensure all expected columns exist in the sheet"""
+def get_cell_value(worksheet, row_index, col_index):
+    """Get cell value by row and column index (1-based)"""
     try:
-        # Get current headers
-        current_headers = worksheet.row_values(1)
-        
-        # If sheet is empty, add all expected columns
-        if not current_headers:
-            logger.info("Sheet is empty, adding all expected columns")
-            worksheet.update('A1', [EXPECTED_COLUMNS])
-            return
-        
-        missing_columns = []
-        for expected_col in EXPECTED_COLUMNS:
-            if expected_col not in current_headers:
-                # Check for variants
-                found_variant = False
-                for variant in COLUMN_VARIANTS.get(expected_col, []):
-                    if variant in current_headers:
-                        found_variant = True
-                        break
-                
-                if not found_variant:
-                    missing_columns.append(expected_col)
-        
-        # Add missing columns
-        if missing_columns:
-            logger.info(f"Adding missing columns: {missing_columns}")
-            updated_headers = current_headers + missing_columns
-            worksheet.update('A1', [updated_headers])
-            logger.info("Successfully updated sheet headers")
-        else:
-            logger.info("All expected columns are present")
-            
+        # Convert to A1 notation
+        cell_ref = gspread.utils.rowcol_to_a1(row_index, col_index)
+        cell = worksheet.acell(cell_ref)
+        return cell.value or ""
     except Exception as e:
-        logger.error(f"Error ensuring columns: {str(e)}")
-        raise
+        logger.error(f"Error getting cell {cell_ref}: {str(e)}")
+        return ""
 
 def fetch_student_by_qrcode(qr_string):
-    """Fetch student data by QR code string - matches raw code values in QRCode column"""
+    """Fetch student data by QR code using column positions"""
     try:
         worksheet = get_sheet()
         
-        # Get all records
-        records = worksheet.get_all_records()
+        # Get all data (including header row if it exists)
+        all_data = worksheet.get_all_values()
         
         logger.info(f"🔍 SEARCHING FOR QR CODE: '{qr_string}'")
-        logger.info(f"Total records in sheet: {len(records)}")
+        logger.info(f"Total rows in sheet: {len(all_data)}")
         
-        # Get the header row to find the exact QR code column name
-        headers = worksheet.row_values(1)
-        logger.info(f"📋 Sheet headers: {headers}")
+        # Check if first row looks like headers or data
+        first_row = all_data[0] if all_data else []
+        has_headers = any(header in first_row for header in ['StudentID', 'Student Name', 'Name', 'ID'])
         
-        # Find the actual QR code column name being used
-        qr_column_name = None
-        for header in headers:
-            if any(variant.lower() in header.lower() for variant in COLUMN_VARIANTS['QRCode']):
-                qr_column_name = header
-                break
-        
-        if qr_column_name:
-            logger.info(f"🎯 Using QR code column: '{qr_column_name}'")
+        if has_headers:
+            logger.info("📋 Sheet appears to have headers, skipping first row")
+            start_row = 2  # Skip header row
         else:
-            logger.warning("❌ No QR code column found in sheet headers")
-            # Try using column M directly
-            if len(headers) >= 13:  # M is the 13th column (0-indexed 12)
-                qr_column_name = headers[12]  # Column M
-                logger.info(f"🔤 Using column M directly: '{qr_column_name}'")
+            logger.info("📋 Sheet appears to have no headers, using all rows as data")
+            start_row = 1  # Use all rows including first
         
-        # Find student by QR code (flexible matching)
-        found_match = False
-        for index, record in enumerate(records, start=2):  # start=2 because row 1 is headers
-            
-            # Get QR code value using the identified column name
-            record_qr = ""
-            if qr_column_name and qr_column_name in record:
-                record_qr = record[qr_column_name] or ""
-            else:
-                # Fallback: try all possible column names
-                for col_name in COLUMN_VARIANTS['QRCode']:
-                    if col_name in record and record[col_name]:
-                        record_qr = record[col_name]
-                        break
-            
-            if not record_qr:
-                continue  # Skip if no QR code value
-            
-            # Clean both strings for comparison
-            sheet_code = str(record_qr).strip()
-            scanned_code = str(qr_string).strip()
-            
-            logger.info(f"📝 Row {index}: Comparing sheet='{sheet_code}' with scanned='{scanned_code}'")
-            
-            # Multiple matching strategies
-            
-            # 1. Exact match (case-sensitive)
-            if sheet_code == scanned_code:
-                logger.info(f"✅ EXACT MATCH at row {index}: {record.get('StudentName', 'Unknown')}")
-                found_match = True
-                return record, index
-            
-            # 2. Case-insensitive match
-            if sheet_code.lower() == scanned_code.lower():
-                logger.info(f"✅ CASE-INSENSITIVE MATCH at row {index}: {record.get('StudentName', 'Unknown')}")
-                found_match = True
-                return record, index
-            
-            # 3. Match after removing all whitespace
-            if sheet_code.replace(' ', '').replace('\t', '').replace('\n', '') == scanned_code.replace(' ', '').replace('\t', '').replace('\n', ''):
-                logger.info(f"✅ WHITESPACE-INSENSITIVE MATCH at row {index}: {record.get('StudentName', 'Unknown')}")
-                found_match = True
-                return record, index
-            
-            # 4. Partial match (if one contains the other)
-            if scanned_code in sheet_code or sheet_code in scanned_code:
-                logger.info(f"⚠️  PARTIAL MATCH at row {index}: sheet='{sheet_code}' scanned='{scanned_code}'")
-                # Don't return for partial matches, but log for debugging
+        # Search through all rows
+        scanned_code = str(qr_string).strip()
+        qr_column = COLUMN_MAPPING['QRCode']  # Column L (12)
         
-        if not found_match:
-            logger.warning(f"❌ QR code '{qr_string}' not found in database after checking {len(records)} records")
-            
-            # Log first few QR values for debugging
-            sample_qr_codes = []
-            for i, record in enumerate(records[:10]):  # First 10 records
-                record_qr = ""
-                if qr_column_name and qr_column_name in record:
-                    record_qr = record[qr_column_name] or ""
-                else:
-                    for col_name in COLUMN_VARIANTS['QRCode']:
-                        if col_name in record and record[col_name]:
-                            record_qr = record[col_name]
-                            break
+        logger.info(f"🎯 Searching QR codes in column {qr_column} (L)")
+        
+        for row_index in range(start_row, len(all_data) + 1):
+            try:
+                # Get QR code value from column L
+                record_qr = get_cell_value(worksheet, row_index, qr_column)
+                record_qr_clean = str(record_qr).strip()
                 
-                if record_qr:
-                    sample_qr_codes.append(f"Row {i+2}: '{record_qr.strip()}'")
-            
-            if sample_qr_codes:
-                logger.info(f"📊 Sample QR codes in sheet:")
-                for code in sample_qr_codes:
-                    logger.info(f"   {code}")
-            else:
-                logger.info("📭 No QR codes found in the first 10 records")
-            
-            # Also check if we can find any record at all
-            if records:
-                first_record_keys = list(records[0].keys())
-                logger.info(f"🔑 First record keys: {first_record_keys}")
-                if qr_column_name and qr_column_name in records[0]:
-                    logger.info(f"📦 First record QR value: '{records[0][qr_column_name]}'")
+                if not record_qr_clean:
+                    continue  # Skip empty QR codes
+                
+                logger.info(f"📝 Row {row_index}: Comparing sheet='{record_qr_clean}' with scanned='{scanned_code}'")
+                
+                # Multiple matching strategies
+                if (record_qr_clean == scanned_code or 
+                    record_qr_clean.lower() == scanned_code.lower() or
+                    record_qr_clean.replace(' ', '') == scanned_code.replace(' ', '')):
+                    
+                    # Found match! Get all student data
+                    student_data = {}
+                    for field, col_index in COLUMN_MAPPING.items():
+                        student_data[field] = get_cell_value(worksheet, row_index, col_index)
+                    
+                    logger.info(f"✅ MATCH FOUND at row {row_index}: {student_data.get('StudentName', 'Unknown')}")
+                    return student_data, row_index
+                    
+            except Exception as e:
+                logger.error(f"Error processing row {row_index}: {str(e)}")
+                continue
+        
+        logger.warning(f"❌ QR code '{qr_string}' not found in any of {len(all_data) - start_row + 1} data rows")
+        
+        # Log sample QR codes for debugging
+        sample_count = min(5, len(all_data) - start_row + 1)
+        if sample_count > 0:
+            logger.info("📊 Sample QR codes from sheet:")
+            for i in range(sample_count):
+                row_idx = start_row + i
+                sample_qr = get_cell_value(worksheet, row_idx, qr_column)
+                logger.info(f"   Row {row_idx}: '{sample_qr}'")
         
         return None, None
         
     except Exception as e:
-        logger.error(f"❌ Error fetching student by QR code: {str(e)}")
+        logger.error(f"❌ Error in fetch_student_by_qrcode: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return None, None
 
 def update_student_status_by_row(row_index, status, comment, coordinator):
-    """Update student status and mark as used"""
+    """Update student status using column positions"""
     try:
         worksheet = get_sheet()
-        
-        # Get current headers to find column indices
-        headers = worksheet.row_values(1)
-        
-        # Map column names to indices
-        col_map = {header: index + 1 for index, header in enumerate(headers)}  # 1-based for gspread
         
         # Prepare update data
         update_data = {}
         
-        # Map our internal column names to actual sheet headers
-        status_col = None
-        for col_name in ['Status', 'status']:
-            if col_name in col_map:
-                status_col = col_map[col_name]
-                break
-        if not status_col:
-            # Find by case-insensitive match
-            for idx, header in enumerate(headers):
-                if header.lower() == 'status':
-                    status_col = idx + 1
-                    break
+        # Map fields to column positions
+        field_mapping = {
+            'Status': status,
+            'Comment': comment,
+            'Coordinator': coordinator,
+            'Used': 'Yes',
+            'LastCheckedTime': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
         
-        if status_col:
-            update_data[status_col] = status
-        
-        # Similarly for other columns...
-        comment_col = None
-        for col_name in ['Comment', 'comment']:
-            if col_name in col_map:
-                comment_col = col_map[col_name]
-                break
-        if not comment_col:
-            for idx, header in enumerate(headers):
-                if header.lower() == 'comment':
-                    comment_col = idx + 1
-                    break
-        if comment_col:
-            update_data[comment_col] = comment
-        
-        coordinator_col = None
-        for col_name in ['Coordinator', 'coordinator']:
-            if col_name in col_map:
-                coordinator_col = col_map[col_name]
-                break
-        if not coordinator_col:
-            for idx, header in enumerate(headers):
-                if header.lower() == 'coordinator':
-                    coordinator_col = idx + 1
-                    break
-        if coordinator_col:
-            update_data[coordinator_col] = coordinator
-        
-        used_col = None
-        for col_name in ['Used', 'used']:
-            if col_name in col_map:
-                used_col = col_map[col_name]
-                break
-        if not used_col:
-            for idx, header in enumerate(headers):
-                if header.lower() == 'used':
-                    used_col = idx + 1
-                    break
-        if used_col:
-            update_data[used_col] = 'Yes'
-        
-        # Always update timestamp
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        time_col = None
-        for col_name in ['LastCheckedTime', 'lastcheckedtime', 'Timestamp', 'timestamp']:
-            if col_name in col_map:
-                time_col = col_map[col_name]
-                break
-        if not time_col:
-            for idx, header in enumerate(headers):
-                if header.lower() in ['lastcheckedtime', 'timestamp']:
-                    time_col = idx + 1
-                    break
-        if time_col:
-            update_data[time_col] = current_time
+        for field, value in field_mapping.items():
+            col_index = COLUMN_MAPPING.get(field)
+            if col_index:
+                update_data[col_index] = value
         
         # Perform batch update
         if update_data:
             cells = []
-            for col, value in update_data.items():
+            for col_index, value in update_data.items():
+                cell_ref = gspread.utils.rowcol_to_a1(row_index, col_index)
                 cells.append({
-                    'range': f"{gspread.utils.rowcol_to_a1(row_index, col)}",
+                    'range': cell_ref,
                     'values': [[value]]
                 })
             
             worksheet.batch_update(cells)
-            logger.info(f"✅ Updated row {row_index} with {len(update_data)} fields")
-            logger.info(f"📝 Update details: Status='{status}', Comment='{comment}', Coordinator='{coordinator}'")
-        
-        # Simple backup reminder
-        backup_check()
+            logger.info(f"✅ Updated row {row_index} with: Status='{status}', Comment='{comment}', Coordinator='{coordinator}'")
         
         return True
         
     except Exception as e:
         logger.error(f"❌ Error updating student status: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return False
 
-def get_all_records():
-    """Get all student records from the sheet"""
-    try:
-        worksheet = get_sheet()
-        return worksheet.get_all_records()
-    except Exception as e:
-        logger.error(f"Error fetching all records: {str(e)}")
-        return []
-
-def backup_check():
-    """Simple backup mechanism - logs backup reminder"""
-    logger.info("💾 Backup check - consider implementing actual backup logic")
-
-# Additional debug function
 def debug_sheet_structure():
-    """Debug function to check sheet structure"""
+    """Debug function to check sheet structure and column positions"""
     try:
         worksheet = get_sheet()
-        headers = worksheet.row_values(1)
-        records = worksheet.get_all_records()
+        all_data = worksheet.get_all_values()
         
         logger.info("🔍 DEBUG SHEET STRUCTURE:")
-        logger.info(f"Headers: {headers}")
-        logger.info(f"Total records: {len(records)}")
+        logger.info(f"Total rows: {len(all_data)}")
         
-        # Check QR code column specifically
-        qr_columns = []
-        for header in headers:
-            if any(variant.lower() in header.lower() for variant in COLUMN_VARIANTS['QRCode']):
-                qr_columns.append(header)
+        # Show first 3 rows with column indicators
+        for i, row in enumerate(all_data[:3]):
+            row_display = []
+            for j, cell in enumerate(row):
+                col_letter = gspread.utils.rowcol_to_a1(1, j+1)[0]  # Get column letter
+                row_display.append(f"{col_letter}: '{cell}'")
+            logger.info(f"Row {i+1}: {', '.join(row_display)}")
         
-        logger.info(f"QR Code columns found: {qr_columns}")
+        # Check what's in the QR code column
+        qr_col = COLUMN_MAPPING['QRCode']
+        qr_col_letter = gspread.utils.rowcol_to_a1(1, qr_col)[0]
+        logger.info(f"QR Code column: {qr_col_letter} (index {qr_col})")
         
-        # Show first 5 QR values
-        if records:
-            logger.info("First 5 QR values:")
-            for i in range(min(5, len(records))):
-                qr_value = ""
-                for col in qr_columns:
-                    if col in records[i] and records[i][col]:
-                        qr_value = records[i][col]
-                        break
-                logger.info(f"  Row {i+2}: '{qr_value}'")
+        # Show first 5 QR codes
+        sample_qrs = []
+        for i in range(min(5, len(all_data))):
+            qr_value = get_cell_value(worksheet, i+1, qr_col)
+            if qr_value:
+                sample_qrs.append(f"Row {i+1}: '{qr_value}'")
+        
+        if sample_qrs:
+            logger.info("Sample QR codes:")
+            for qr in sample_qrs:
+                logger.info(f"  {qr}")
+        else:
+            logger.info("No QR codes found in first 5 rows")
         
         return True
     except Exception as e:
         logger.error(f"Error debugging sheet structure: {str(e)}")
+        return False
+
+def test_connection():
+    """Test Google Sheets connection"""
+    try:
+        worksheet = get_sheet()
+        all_data = worksheet.get_all_values()
+        
+        logger.info("✅ Connection test successful!")
+        logger.info(f"Sheet title: {worksheet.title}")
+        logger.info(f"Total rows: {len(all_data)}")
+        
+        return True
+    except Exception as e:
+        logger.error(f"❌ Connection test failed: {str(e)}")
         return False
