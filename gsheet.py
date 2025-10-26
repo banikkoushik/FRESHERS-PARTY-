@@ -25,7 +25,7 @@ EXPECTED_COLUMNS = [
 COLUMN_VARIANTS = {
     'StudentID': ['Student ID', 'StudentID', 'ID'],
     'StudentName': ['Student Name', 'StudentName', 'Name'],
-    'QRCode': ['QR Code', 'QRCode', 'QR', 'QR String', 'QRValue'],
+    'QRCode': ['QR Code', 'QRCode', 'QR', 'QR String', 'QRValue', 'M'],
     'Used': ['Used', 'Scanned', 'Checked'],
     'Coordinator': ['Coordinator', 'Checked By', 'Verified By'],
     'LastCheckedTime': ['Last Checked Time', 'Timestamp', 'Checked Time']
@@ -116,29 +116,114 @@ def fetch_student_by_qrcode(qr_string):
         # Get all records
         records = worksheet.get_all_records()
         
-        # Find student by QR code (exact match for raw codes)
-        for index, record in enumerate(records, start=2):  # start=2 because row 1 is headers
-            # Try different possible column names for QR code
-            record_qr = (
-                record.get('QRCode', '') or 
-                record.get('QR Code', '') or 
-                record.get('QR', '') or
-                record.get('qrcode', '') or
-                record.get('qr code', '') or
-                record.get('QRString', '') or
-                record.get('QR Value', '')
-            )
-            
-            # Exact match for raw codes (case-sensitive)
-            if record_qr and record_qr.strip() == qr_string.strip():
-                logger.info(f"Found student at row {index}: {record.get('StudentName', 'Unknown')}")
-                return record, index
+        logger.info(f"🔍 SEARCHING FOR QR CODE: '{qr_string}'")
+        logger.info(f"Total records in sheet: {len(records)}")
         
-        logger.warning(f"QR code not found in database: {qr_string}")
+        # Get the header row to find the exact QR code column name
+        headers = worksheet.row_values(1)
+        logger.info(f"📋 Sheet headers: {headers}")
+        
+        # Find the actual QR code column name being used
+        qr_column_name = None
+        for header in headers:
+            if any(variant.lower() in header.lower() for variant in COLUMN_VARIANTS['QRCode']):
+                qr_column_name = header
+                break
+        
+        if qr_column_name:
+            logger.info(f"🎯 Using QR code column: '{qr_column_name}'")
+        else:
+            logger.warning("❌ No QR code column found in sheet headers")
+            # Try using column M directly
+            if len(headers) >= 13:  # M is the 13th column (0-indexed 12)
+                qr_column_name = headers[12]  # Column M
+                logger.info(f"🔤 Using column M directly: '{qr_column_name}'")
+        
+        # Find student by QR code (flexible matching)
+        found_match = False
+        for index, record in enumerate(records, start=2):  # start=2 because row 1 is headers
+            
+            # Get QR code value using the identified column name
+            record_qr = ""
+            if qr_column_name and qr_column_name in record:
+                record_qr = record[qr_column_name] or ""
+            else:
+                # Fallback: try all possible column names
+                for col_name in COLUMN_VARIANTS['QRCode']:
+                    if col_name in record and record[col_name]:
+                        record_qr = record[col_name]
+                        break
+            
+            if not record_qr:
+                continue  # Skip if no QR code value
+            
+            # Clean both strings for comparison
+            sheet_code = str(record_qr).strip()
+            scanned_code = str(qr_string).strip()
+            
+            logger.info(f"📝 Row {index}: Comparing sheet='{sheet_code}' with scanned='{scanned_code}'")
+            
+            # Multiple matching strategies
+            
+            # 1. Exact match (case-sensitive)
+            if sheet_code == scanned_code:
+                logger.info(f"✅ EXACT MATCH at row {index}: {record.get('StudentName', 'Unknown')}")
+                found_match = True
+                return record, index
+            
+            # 2. Case-insensitive match
+            if sheet_code.lower() == scanned_code.lower():
+                logger.info(f"✅ CASE-INSENSITIVE MATCH at row {index}: {record.get('StudentName', 'Unknown')}")
+                found_match = True
+                return record, index
+            
+            # 3. Match after removing all whitespace
+            if sheet_code.replace(' ', '').replace('\t', '').replace('\n', '') == scanned_code.replace(' ', '').replace('\t', '').replace('\n', ''):
+                logger.info(f"✅ WHITESPACE-INSENSITIVE MATCH at row {index}: {record.get('StudentName', 'Unknown')}")
+                found_match = True
+                return record, index
+            
+            # 4. Partial match (if one contains the other)
+            if scanned_code in sheet_code or sheet_code in scanned_code:
+                logger.info(f"⚠️  PARTIAL MATCH at row {index}: sheet='{sheet_code}' scanned='{scanned_code}'")
+                # Don't return for partial matches, but log for debugging
+        
+        if not found_match:
+            logger.warning(f"❌ QR code '{qr_string}' not found in database after checking {len(records)} records")
+            
+            # Log first few QR values for debugging
+            sample_qr_codes = []
+            for i, record in enumerate(records[:10]):  # First 10 records
+                record_qr = ""
+                if qr_column_name and qr_column_name in record:
+                    record_qr = record[qr_column_name] or ""
+                else:
+                    for col_name in COLUMN_VARIANTS['QRCode']:
+                        if col_name in record and record[col_name]:
+                            record_qr = record[col_name]
+                            break
+                
+                if record_qr:
+                    sample_qr_codes.append(f"Row {i+2}: '{record_qr.strip()}'")
+            
+            if sample_qr_codes:
+                logger.info(f"📊 Sample QR codes in sheet:")
+                for code in sample_qr_codes:
+                    logger.info(f"   {code}")
+            else:
+                logger.info("📭 No QR codes found in the first 10 records")
+            
+            # Also check if we can find any record at all
+            if records:
+                first_record_keys = list(records[0].keys())
+                logger.info(f"🔑 First record keys: {first_record_keys}")
+                if qr_column_name and qr_column_name in records[0]:
+                    logger.info(f"📦 First record QR value: '{records[0][qr_column_name]}'")
+        
         return None, None
         
     except Exception as e:
-        logger.error(f"Error fetching student by QR code: {str(e)}")
+        logger.error(f"❌ Error fetching student by QR code: {str(e)}")
         return None, None
 
 def update_student_status_by_row(row_index, status, comment, coordinator):
@@ -236,7 +321,8 @@ def update_student_status_by_row(row_index, status, comment, coordinator):
                 })
             
             worksheet.batch_update(cells)
-            logger.info(f"Updated row {row_index} with {len(update_data)} fields")
+            logger.info(f"✅ Updated row {row_index} with {len(update_data)} fields")
+            logger.info(f"📝 Update details: Status='{status}', Comment='{comment}', Coordinator='{coordinator}'")
         
         # Simple backup reminder
         backup_check()
@@ -244,7 +330,7 @@ def update_student_status_by_row(row_index, status, comment, coordinator):
         return True
         
     except Exception as e:
-        logger.error(f"Error updating student status: {str(e)}")
+        logger.error(f"❌ Error updating student status: {str(e)}")
         return False
 
 def get_all_records():
@@ -258,4 +344,40 @@ def get_all_records():
 
 def backup_check():
     """Simple backup mechanism - logs backup reminder"""
-    logger.info("Backup check - consider implementing actual backup logic")
+    logger.info("💾 Backup check - consider implementing actual backup logic")
+
+# Additional debug function
+def debug_sheet_structure():
+    """Debug function to check sheet structure"""
+    try:
+        worksheet = get_sheet()
+        headers = worksheet.row_values(1)
+        records = worksheet.get_all_records()
+        
+        logger.info("🔍 DEBUG SHEET STRUCTURE:")
+        logger.info(f"Headers: {headers}")
+        logger.info(f"Total records: {len(records)}")
+        
+        # Check QR code column specifically
+        qr_columns = []
+        for header in headers:
+            if any(variant.lower() in header.lower() for variant in COLUMN_VARIANTS['QRCode']):
+                qr_columns.append(header)
+        
+        logger.info(f"QR Code columns found: {qr_columns}")
+        
+        # Show first 5 QR values
+        if records:
+            logger.info("First 5 QR values:")
+            for i in range(min(5, len(records))):
+                qr_value = ""
+                for col in qr_columns:
+                    if col in records[i] and records[i][col]:
+                        qr_value = records[i][col]
+                        break
+                logger.info(f"  Row {i+2}: '{qr_value}'")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error debugging sheet structure: {str(e)}")
+        return False
