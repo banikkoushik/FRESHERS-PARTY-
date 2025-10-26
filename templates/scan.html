@@ -54,6 +54,209 @@
     </div>
 </div>
 
+<!-- Load the QR scanner library -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+
+<script>
+// QR Scanner functionality
+let html5QrCode = null;
+let currentCameraId = null;
+let isScanning = false;
+
+// Camera status updates
+function updateCameraStatus(message, type = 'info') {
+    const statusEl = document.getElementById('camera-status');
+    if (statusEl) {
+        statusEl.innerHTML = `<div class="status-${type}">${message}</div>`;
+    }
+}
+
+// Auto-start camera when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Page loaded, starting camera...');
+    setTimeout(startCamera, 500);
+});
+
+async function startCamera() {
+    if (isScanning) {
+        console.log('Camera is already scanning');
+        return;
+    }
+    
+    try {
+        updateCameraStatus('🔄 Starting camera...', 'loading');
+        console.log('Attempting to start camera...');
+        
+        // Hide start button, show stop button
+        document.getElementById('start-camera-btn').style.display = 'none';
+        document.getElementById('stop-camera-btn').style.display = 'inline-block';
+        
+        // Create scanner instance
+        html5QrCode = new Html5Qrcode("qr-reader");
+        
+        // Get available cameras
+        const cameras = await Html5Qrcode.getCameras();
+        console.log('Available cameras:', cameras);
+        
+        if (cameras && cameras.length === 0) {
+            throw new Error("No cameras found");
+        }
+        
+        // Prefer rear camera on mobile, or use first available
+        let cameraId = cameras[0].id;
+        if (cameras.length > 1) {
+            // Try to find rear camera
+            const rearCamera = cameras.find(cam => 
+                cam.label.toLowerCase().includes('back') || 
+                cam.label.toLowerCase().includes('rear') ||
+                cam.label.toLowerCase().includes('environment')
+            );
+            if (rearCamera) {
+                cameraId = rearCamera.id;
+                console.log('Selected rear camera');
+            }
+        }
+        
+        currentCameraId = cameraId;
+        
+        // Start scanning with optimized settings for mobile
+        await html5QrCode.start(
+            cameraId,
+            {
+                fps: 10,
+                qrbox: { 
+                    width: 250, 
+                    height: 250 
+                },
+                aspectRatio: 1.0,
+                focusMode: "continuous"
+            },
+            onScanSuccess,
+            onScanFailure
+        );
+        
+        isScanning = true;
+        updateCameraStatus('✅ Camera active - Point at QR code', 'success');
+        console.log('Camera started successfully');
+        
+        // Show switch camera button if multiple cameras available
+        if (cameras.length > 1) {
+            document.getElementById('switch-camera-btn').style.display = 'inline-block';
+        }
+        
+    } catch (error) {
+        console.error('Camera error:', error);
+        handleCameraError(error);
+    }
+}
+
+function stopCamera() {
+    if (!html5QrCode || !isScanning) return;
+    
+    html5QrCode.stop().then(() => {
+        isScanning = false;
+        updateCameraStatus('⏹️ Camera stopped', 'info');
+        
+        // Update UI
+        document.getElementById('start-camera-btn').style.display = 'inline-block';
+        document.getElementById('stop-camera-btn').style.display = 'none';
+        document.getElementById('switch-camera-btn').style.display = 'none';
+        
+    }).catch(error => {
+        console.error('Stop error:', error);
+        updateCameraStatus('❌ Error stopping camera', 'error');
+    });
+}
+
+async function switchCamera() {
+    if (!html5QrCode || !isScanning) return;
+    
+    try {
+        updateCameraStatus('🔄 Switching camera...', 'loading');
+        
+        const cameras = await Html5Qrcode.getCameras();
+        if (cameras.length < 2) {
+            updateCameraStatus('ℹ️ Only one camera available', 'info');
+            return;
+        }
+        
+        // Find next camera
+        const currentIndex = cameras.findIndex(cam => cam.id === currentCameraId);
+        const nextIndex = (currentIndex + 1) % cameras.length;
+        const nextCameraId = cameras[nextIndex].id;
+        
+        // Stop current camera
+        await html5QrCode.stop();
+        
+        // Start with new camera
+        await html5QrCode.start(
+            nextCameraId,
+            {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            },
+            onScanSuccess,
+            onScanFailure
+        );
+        
+        currentCameraId = nextCameraId;
+        updateCameraStatus('✅ Camera switched', 'success');
+        
+    } catch (error) {
+        console.error('Switch error:', error);
+        updateCameraStatus('❌ Error switching camera', 'error');
+    }
+}
+
+function onScanSuccess(decodedText, decodedResult) {
+    console.log(`QR Scan successful: ${decodedText}`);
+    
+    // Stop scanner after successful scan
+    if (html5QrCode && isScanning) {
+        html5QrCode.stop().then(() => {
+            isScanning = false;
+            updateCameraStatus('✅ QR Code Scanned!', 'success');
+        }).catch(console.error);
+    }
+    
+    // Process the QR code
+    fetchStudentData(decodedText);
+}
+
+function onScanFailure(error) {
+    // Expected errors - don't show to user
+    if (error && !error.toString().includes('No QR code found')) {
+        console.log('Scan error:', error);
+    }
+}
+
+function handleCameraError(error) {
+    console.error('Camera setup failed:', error);
+    
+    let errorMessage = '❌ Camera access failed';
+    
+    if (error.name === 'NotAllowedError') {
+        errorMessage = '❌ Camera permission denied. Please allow camera access in your browser settings and refresh the page.';
+    } else if (error.name === 'NotFoundError') {
+        errorMessage = '❌ No camera found on this device.';
+    } else if (error.name === 'NotSupportedError') {
+        errorMessage = '❌ Camera not supported in this browser.';
+    } else if (error.name === 'NotReadableError') {
+        errorMessage = '❌ Camera is already in use by another application.';
+    } else if (error.message && error.message.includes('No cameras found')) {
+        errorMessage = '❌ No camera found on this device.';
+    }
+    
+    updateCameraStatus(errorMessage, 'error');
+    
+    // Show start button in case user wants to retry
+    document.getElementById('start-camera-btn').style.display = 'inline-block';
+    document.getElementById('stop-camera-btn').style.display = 'none';
+    document.getElementById('switch-camera-btn').style.display = 'none';
+}
+</script>
+
 <style>
 .scan-container {
     width: 100%;
@@ -269,6 +472,23 @@
     .camera-status {
         font-size: 14px;
     }
+}
+
+/* Hide the HTML5 QR Code scanner's own border */
+#qr-reader__dashboard {
+    border: none !important;
+}
+
+#qr-reader__scan_region {
+    border: none !important;
+}
+
+#html5-qrcode-anchor-scan-type-change {
+    display: none !important;
+}
+
+#qr-reader__dashboard_section_swaplink {
+    display: none !important;
 }
 </style>
 {% endblock %}
