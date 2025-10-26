@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FRESH CHECKS - QR Gate</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+    <!-- Remove the external script - we'll load it conditionally -->
 </head>
 <body>
     <div class="container">
@@ -61,20 +61,8 @@
                             `QR already used by ${data.used_by} at ${data.used_at}`, 
                             'warning'
                         );
-                        // Restart scanner after showing error
-                        setTimeout(() => {
-                            if (window.currentScanner) {
-                                initializeQRScanner();
-                            }
-                        }, 3000);
                     } else {
                         showNotification('Error: ' + data.error, 'error');
-                        // Restart scanner
-                        setTimeout(() => {
-                            if (window.currentScanner) {
-                                initializeQRScanner();
-                            }
-                        }, 2000);
                     }
                 } else {
                     // Redirect to result page with student data
@@ -104,90 +92,8 @@
             .catch(error => {
                 console.error('Error:', error);
                 showNotification('Network error occurred', 'error');
-                // Restart scanner on error
-                setTimeout(() => {
-                    if (window.currentScanner) {
-                        initializeQRScanner();
-                    }
-                }, 2000);
             });
         }
-
-        // QR Scanner functionality
-        function initializeQRScanner() {
-            // Check if html5qrcode is available
-            if (typeof Html5QrcodeScanner === 'undefined') {
-                console.warn('Html5QrcodeScanner not loaded, using manual input only');
-                return;
-            }
-
-            const qrReader = document.getElementById('qr-reader');
-            if (!qrReader) return;
-
-            // Clear any existing scanner
-            if (window.currentScanner) {
-                window.currentScanner.clear();
-            }
-
-            window.currentScanner = new Html5QrcodeScanner(
-                "qr-reader", 
-                { 
-                    fps: 10, 
-                    qrbox: { width: 250, height: 250 },
-                    supportedScanTypes: [
-                        Html5QrcodeScanType.SCAN_TYPE_QR_CODE
-                    ]
-                },
-                false
-            );
-
-            window.currentScanner.render(onQRScanSuccess, onQRScanFailure);
-        }
-
-        function onQRScanSuccess(decodedText, decodedResult) {
-            console.log(`QR Scan successful: ${decodedText}`);
-            
-            // Stop scanner after successful scan
-            if (window.currentScanner) {
-                window.currentScanner.clear();
-                window.currentScanner = null;
-            }
-            
-            // Process the QR code
-            fetchStudentData(decodedText);
-        }
-
-        function onQRScanFailure(error) {
-            // Mostly expected, don't show errors for normal operation
-        }
-
-        function stopScanner() {
-            if (window.currentScanner) {
-                window.currentScanner.clear();
-                window.currentScanner = null;
-                showNotification('Camera stopped', 'info');
-            }
-        }
-
-        // Manual QR input fallback
-        function submitManualQR() {
-            const qrInput = document.getElementById('manualQrInput');
-            const qrString = qrInput.value.trim();
-            
-            if (qrString) {
-                fetchStudentData(qrString);
-                qrInput.value = '';
-            } else {
-                showNotification('Please enter a QR code', 'error');
-            }
-        }
-
-        // Initialize scanner when page loads if scanner container exists
-        document.addEventListener('DOMContentLoaded', function() {
-            if (document.getElementById('qr-reader')) {
-                initializeQRScanner();
-            }
-        });
     </script>
 </body>
 </html>

@@ -10,31 +10,50 @@
             </div>
         </div>
 
-        <div class="manual-input-section">
-            <h3>📝 Manual QR Input</h3>
-            <p class="section-description">Enter QR code manually if camera is not working</p>
-            <div class="manual-input">
-                <input type="text" id="manualQrInput" placeholder="Paste or type QR code here...">
-                <button onclick="submitManualQR()" class="btn btn-secondary">Submit QR</button>
+        <!-- Camera Status -->
+        <div id="camera-status" class="camera-status">
+            <div class="status-loading">🔄 Initializing camera...</div>
+        </div>
+
+        <!-- Scanner Section -->
+        <div class="scanner-section">
+            <div id="qr-reader" class="qr-reader-container">
+                <div class="scanner-placeholder">
+                    <div class="placeholder-icon">📷</div>
+                    <p>Camera feed will appear here</p>
+                </div>
+            </div>
+            
+            <div class="scanner-controls">
+                <button id="start-camera-btn" onclick="startCamera()" class="btn btn-success">
+                    🎥 Start Camera
+                </button>
+                <button id="stop-camera-btn" onclick="stopCamera()" class="btn btn-warning" style="display: none;">
+                    ⏹️ Stop Camera
+                </button>
+                <button onclick="switchCamera()" class="btn btn-info" id="switch-camera-btn" style="display: none;">
+                    🔄 Switch Camera
+                </button>
             </div>
         </div>
 
-        <div class="scanner-section">
-            <h3>📷 Camera Scanner</h3>
-            <p class="section-description">Point camera at QR code to scan automatically</p>
-            <div id="qr-reader" class="qr-reader-container"></div>
-            <div class="scanner-controls">
-                <button onclick="stopScanner()" class="btn btn-warning">Stop Camera</button>
-                <button onclick="initializeQRScanner()" class="btn btn-info">Restart Camera</button>
+        <!-- Manual Input Fallback (Hidden by default) -->
+        <div id="manual-fallback" class="manual-fallback" style="display: none;">
+            <h3>📝 Manual QR Input</h3>
+            <p class="section-description">Camera not available. Please enter QR code manually:</p>
+            <div class="manual-input">
+                <input type="text" id="manualQrInput" placeholder="Enter QR code here...">
+                <button onclick="submitManualQR()" class="btn btn-primary">Submit QR</button>
             </div>
         </div>
 
         <div class="instructions">
-            <h4>💡 Instructions:</h4>
+            <h4>💡 Mobile Instructions:</h4>
             <ul>
+                <li>Hold your phone steady about 6-12 inches from the QR code</li>
                 <li>Ensure good lighting for better scanning</li>
-                <li>Hold the QR code steady in front of the camera</li>
-                <li>Use manual input if camera is not available</li>
+                <li>Allow camera permissions when prompted</li>
+                <li>Use "Switch Camera" to toggle between front and rear cameras</li>
                 <li>Each QR code can only be used once</li>
             </ul>
         </div>
@@ -44,6 +63,210 @@
         </div>
     </div>
 </div>
+
+<!-- Load the QR scanner library -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+
+<script>
+let html5QrCode = null;
+let currentCameraId = null;
+let isScanning = false;
+
+// Camera status updates
+function updateCameraStatus(message, type = 'info') {
+    const statusEl = document.getElementById('camera-status');
+    statusEl.innerHTML = `<div class="status-${type}">${message}</div>`;
+}
+
+// Initialize camera when page loads for mobile optimization
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-start camera on mobile devices
+    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        setTimeout(startCamera, 1000); // Small delay to ensure DOM is ready
+    }
+});
+
+async function startCamera() {
+    if (isScanning) return;
+    
+    try {
+        updateCameraStatus('🔄 Starting camera...', 'loading');
+        
+        // Create scanner instance
+        html5QrCode = new Html5Qrcode("qr-reader");
+        
+        // Get available cameras
+        const cameras = await Html5Qrcode.getCameras();
+        
+        if (cameras && cameras.length === 0) {
+            throw new Error("No cameras found");
+        }
+        
+        // Prefer rear camera on mobile, or use first available
+        let cameraId = cameras[0].id;
+        if (cameras.length > 1) {
+            // Try to find rear camera
+            const rearCamera = cameras.find(cam => 
+                cam.label.toLowerCase().includes('back') || 
+                cam.label.toLowerCase().includes('rear') ||
+                cam.label.toLowerCase().includes('environment')
+            );
+            if (rearCamera) {
+                cameraId = rearCamera.id;
+            }
+        }
+        
+        currentCameraId = cameraId;
+        
+        // Start scanning with optimized settings for mobile
+        await html5QrCode.start(
+            cameraId,
+            {
+                fps: 10,
+                qrbox: { 
+                    width: 250, 
+                    height: 250 
+                },
+                aspectRatio: 1.0,
+                focusMode: "continuous"
+            },
+            onScanSuccess,
+            onScanFailure
+        );
+        
+        isScanning = true;
+        updateCameraStatus('✅ Camera active - Point at QR code', 'success');
+        
+        // Update UI
+        document.getElementById('start-camera-btn').style.display = 'none';
+        document.getElementById('stop-camera-btn').style.display = 'inline-block';
+        document.getElementById('switch-camera-btn').style.display = 'inline-block';
+        document.getElementById('manual-fallback').style.display = 'none';
+        
+    } catch (error) {
+        console.error('Camera error:', error);
+        handleCameraError(error);
+    }
+}
+
+function stopCamera() {
+    if (!html5QrCode || !isScanning) return;
+    
+    html5QrCode.stop().then(() => {
+        isScanning = false;
+        updateCameraStatus('⏹️ Camera stopped', 'info');
+        
+        // Update UI
+        document.getElementById('start-camera-btn').style.display = 'inline-block';
+        document.getElementById('stop-camera-btn').style.display = 'none';
+        document.getElementById('switch-camera-btn').style.display = 'none';
+        
+    }).catch(error => {
+        console.error('Stop error:', error);
+        updateCameraStatus('❌ Error stopping camera', 'error');
+    });
+}
+
+async function switchCamera() {
+    if (!html5QrCode || !isScanning) return;
+    
+    try {
+        updateCameraStatus('🔄 Switching camera...', 'loading');
+        
+        const cameras = await Html5Qrcode.getCameras();
+        if (cameras.length < 2) {
+            updateCameraStatus('ℹ️ Only one camera available', 'info');
+            return;
+        }
+        
+        // Find next camera
+        const currentIndex = cameras.findIndex(cam => cam.id === currentCameraId);
+        const nextIndex = (currentIndex + 1) % cameras.length;
+        const nextCameraId = cameras[nextIndex].id;
+        
+        // Stop current camera
+        await html5QrCode.stop();
+        
+        // Start with new camera
+        await html5QrCode.start(
+            nextCameraId,
+            {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            },
+            onScanSuccess,
+            onScanFailure
+        );
+        
+        currentCameraId = nextCameraId;
+        updateCameraStatus('✅ Camera switched', 'success');
+        
+    } catch (error) {
+        console.error('Switch error:', error);
+        updateCameraStatus('❌ Error switching camera', 'error');
+    }
+}
+
+function onScanSuccess(decodedText, decodedResult) {
+    console.log(`QR Scan successful: ${decodedText}`);
+    
+    // Stop scanner after successful scan
+    if (html5QrCode && isScanning) {
+        html5QrCode.stop().then(() => {
+            isScanning = false;
+            updateCameraStatus('✅ QR Code Scanned!', 'success');
+        }).catch(console.error);
+    }
+    
+    // Process the QR code
+    fetchStudentData(decodedText);
+}
+
+function onScanFailure(error) {
+    // Expected errors - don't show to user
+    if (error && !error.toString().includes('No QR code found')) {
+        console.log('Scan error (expected):', error);
+    }
+}
+
+function handleCameraError(error) {
+    console.error('Camera setup failed:', error);
+    
+    let errorMessage = '❌ Camera access failed';
+    
+    if (error.name === 'NotAllowedError') {
+        errorMessage = '❌ Camera permission denied. Please allow camera access in your browser settings.';
+    } else if (error.name === 'NotFoundError') {
+        errorMessage = '❌ No camera found on this device.';
+    } else if (error.name === 'NotSupportedError') {
+        errorMessage = '❌ Camera not supported in this browser.';
+    } else if (error.name === 'NotReadableError') {
+        errorMessage = '❌ Camera is already in use by another application.';
+    }
+    
+    updateCameraStatus(errorMessage, 'error');
+    
+    // Show manual fallback
+    document.getElementById('manual-fallback').style.display = 'block';
+    document.getElementById('start-camera-btn').style.display = 'inline-block';
+    document.getElementById('stop-camera-btn').style.display = 'none';
+    document.getElementById('switch-camera-btn').style.display = 'none';
+}
+
+// Manual QR input fallback
+function submitManualQR() {
+    const qrInput = document.getElementById('manualQrInput');
+    const qrString = qrInput.value.trim();
+    
+    if (qrString) {
+        fetchStudentData(qrString);
+        qrInput.value = '';
+    } else {
+        showNotification('Please enter a QR code', 'error');
+    }
+}
+</script>
 
 <style>
 .scan-container {
@@ -56,8 +279,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 30px;
-    padding-bottom: 20px;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
     border-bottom: 2px solid #e2e8f0;
 }
 
@@ -69,67 +292,74 @@
 .coordinator-badge {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 10px 20px;
-    border-radius: 25px;
+    padding: 8px 16px;
+    border-radius: 20px;
     font-size: 14px;
     font-weight: 600;
 }
 
-.manual-input-section,
-.scanner-section {
-    margin-bottom: 30px;
-    padding: 25px;
-    background: #f8fafc;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
+.camera-status {
+    margin: 15px 0;
+    text-align: center;
 }
 
-.manual-input-section h3,
-.scanner-section h3 {
-    color: #2d3748;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.section-description {
-    color: #718096;
-    margin-bottom: 15px;
-    font-size: 14px;
-}
-
-.manual-input {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-}
-
-.manual-input input {
-    flex: 1;
-    padding: 12px 16px;
-    border: 2px solid #cbd5e0;
+.status-loading, .status-success, .status-error, .status-info {
+    padding: 10px 15px;
     border-radius: 8px;
-    font-size: 16px;
-    transition: all 0.3s ease;
+    font-weight: 600;
+    margin: 10px 0;
 }
 
-.manual-input input:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+.status-loading {
+    background: #fffaf0;
+    color: #744210;
+    border: 1px solid #fed7aa;
+}
+
+.status-success {
+    background: #f0fff4;
+    color: #22543d;
+    border: 1px solid #9ae6b4;
+}
+
+.status-error {
+    background: #fed7d7;
+    color: #c53030;
+    border: 1px solid #feb2b2;
+}
+
+.status-info {
+    background: #ebf8ff;
+    color: #2b6cb0;
+    border: 1px solid #90cdf4;
+}
+
+.scanner-section {
+    margin: 20px 0;
 }
 
 .qr-reader-container {
+    width: 100%;
+    min-height: 300px;
     border: 2px dashed #cbd5e0;
     border-radius: 12px;
-    padding: 20px;
-    margin: 20px 0;
-    background: white;
-    min-height: 300px;
+    margin: 15px 0;
+    background: #f7fafc;
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.scanner-placeholder {
+    text-align: center;
+    color: #718096;
+}
+
+.placeholder-icon {
+    font-size: 48px;
+    margin-bottom: 10px;
 }
 
 .scanner-controls {
@@ -137,10 +367,11 @@
     gap: 10px;
     justify-content: center;
     flex-wrap: wrap;
+    margin: 15px 0;
 }
 
 .btn {
-    padding: 12px 24px;
+    padding: 12px 20px;
     border: none;
     border-radius: 8px;
     font-size: 14px;
@@ -153,13 +384,13 @@
     gap: 8px;
 }
 
-.btn-secondary {
-    background: #718096;
+.btn-success {
+    background: #48bb78;
     color: white;
 }
 
-.btn-secondary:hover {
-    background: #4a5568;
+.btn-success:hover {
+    background: #38a169;
     transform: translateY(-1px);
 }
 
@@ -195,16 +426,64 @@
     transform: translateY(-1px);
 }
 
-.instructions {
+.manual-fallback {
     background: #fffaf0;
     padding: 20px;
     border-radius: 8px;
     border-left: 4px solid #ed8936;
-    margin: 25px 0;
+    margin: 20px 0;
+}
+
+.manual-fallback h3 {
+    color: #744210;
+    margin-bottom: 10px;
+}
+
+.section-description {
+    color: #718096;
+    margin-bottom: 15px;
+    font-size: 14px;
+}
+
+.manual-input {
+    display: flex;
+    gap: 10px;
+}
+
+.manual-input input {
+    flex: 1;
+    padding: 12px 16px;
+    border: 2px solid #cbd5e0;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+.manual-input input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.btn-primary {
+    background: #667eea;
+    color: white;
+    white-space: nowrap;
+}
+
+.btn-primary:hover {
+    background: #5a6fd8;
+    transform: translateY(-1px);
+}
+
+.instructions {
+    background: #f0fff4;
+    padding: 15px 20px;
+    border-radius: 8px;
+    border-left: 4px solid #48bb78;
+    margin: 20px 0;
 }
 
 .instructions h4 {
-    color: #744210;
+    color: #22543d;
     margin-bottom: 10px;
     display: flex;
     align-items: center;
@@ -212,13 +491,14 @@
 }
 
 .instructions ul {
-    color: #744210;
+    color: #22543d;
     padding-left: 20px;
     margin: 0;
 }
 
 .instructions li {
     margin-bottom: 5px;
+    line-height: 1.4;
 }
 
 .logout-section {
@@ -227,19 +507,12 @@
     border-top: 1px solid #e2e8f0;
 }
 
+/* Mobile-specific styles */
 @media (max-width: 768px) {
     .scan-header {
         flex-direction: column;
-        gap: 15px;
+        gap: 10px;
         text-align: center;
-    }
-    
-    .manual-input {
-        flex-direction: column;
-    }
-    
-    .manual-input input {
-        width: 100%;
     }
     
     .scanner-controls {
@@ -251,10 +524,26 @@
         justify-content: center;
     }
     
+    .manual-input {
+        flex-direction: column;
+    }
+    
     .qr-reader-container {
-        padding: 10px;
         min-height: 250px;
     }
+    
+    .camera-status {
+        font-size: 14px;
+    }
+}
+
+/* Hide the HTML5 QR Code scanner's own border */
+#qr-reader__dashboard {
+    border: none !important;
+}
+
+#qr-reader__scan_region {
+    border: none !important;
 }
 </style>
 {% endblock %}
