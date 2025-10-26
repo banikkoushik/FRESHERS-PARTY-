@@ -25,7 +25,7 @@ EXPECTED_COLUMNS = [
 COLUMN_VARIANTS = {
     'StudentID': ['Student ID', 'StudentID', 'ID'],
     'StudentName': ['Student Name', 'StudentName', 'Name'],
-    'QRCode': ['QR Code', 'QRCode', 'QR'],
+    'QRCode': ['QR Code', 'QRCode', 'QR', 'QR String', 'QRValue'],
     'Used': ['Used', 'Scanned', 'Checked'],
     'Coordinator': ['Coordinator', 'Checked By', 'Verified By'],
     'LastCheckedTime': ['Last Checked Time', 'Timestamp', 'Checked Time']
@@ -109,14 +109,14 @@ def ensure_columns(worksheet):
         raise
 
 def fetch_student_by_qrcode(qr_string):
-    """Fetch student data by QR code string"""
+    """Fetch student data by QR code string - matches raw code values in QRCode column"""
     try:
         worksheet = get_sheet()
         
         # Get all records
         records = worksheet.get_all_records()
         
-        # Find student by QR code (case-insensitive)
+        # Find student by QR code (exact match for raw codes)
         for index, record in enumerate(records, start=2):  # start=2 because row 1 is headers
             # Try different possible column names for QR code
             record_qr = (
@@ -124,14 +124,17 @@ def fetch_student_by_qrcode(qr_string):
                 record.get('QR Code', '') or 
                 record.get('QR', '') or
                 record.get('qrcode', '') or
-                record.get('qr code', '')
+                record.get('qr code', '') or
+                record.get('QRString', '') or
+                record.get('QR Value', '')
             )
             
-            if record_qr and record_qr.strip().lower() == qr_string.strip().lower():
+            # Exact match for raw codes (case-sensitive)
+            if record_qr and record_qr.strip() == qr_string.strip():
                 logger.info(f"Found student at row {index}: {record.get('StudentName', 'Unknown')}")
                 return record, index
         
-        logger.warning(f"QR code not found: {qr_string}")
+        logger.warning(f"QR code not found in database: {qr_string}")
         return None, None
         
     except Exception as e:
