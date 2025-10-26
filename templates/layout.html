@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FRESH CHECKS - QR Gate</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <!-- Remove the external script - we'll load it conditionally -->
 </head>
 <body>
     <div class="container">
@@ -61,8 +60,20 @@
                             `QR already used by ${data.used_by} at ${data.used_at}`, 
                             'warning'
                         );
+                        // Restart camera after 3 seconds
+                        setTimeout(() => {
+                            if (window.startCamera) {
+                                window.startCamera();
+                            }
+                        }, 3000);
                     } else {
                         showNotification('Error: ' + data.error, 'error');
+                        // Restart camera after 2 seconds
+                        setTimeout(() => {
+                            if (window.startCamera) {
+                                window.startCamera();
+                            }
+                        }, 2000);
                     }
                 } else {
                     // Redirect to result page with student data
@@ -92,6 +103,12 @@
             .catch(error => {
                 console.error('Error:', error);
                 showNotification('Network error occurred', 'error');
+                // Restart camera after 2 seconds
+                setTimeout(() => {
+                    if (window.startCamera) {
+                        window.startCamera();
+                    }
+                }, 2000);
             });
         }
     </script>
