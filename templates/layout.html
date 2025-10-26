@@ -25,18 +25,26 @@
     <!-- Notification System -->
     <div id="notification" class="notification hidden"></div>
 
+    <!-- Load QR scanner library -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+    
+    <!-- Load our QR handling script -->
+    <script src="{{ url_for('static', filename='js/qr.js') }}"></script>
+
     <script>
         // Global notification function
         function showNotification(message, type = 'info') {
             const notification = document.getElementById('notification');
-            notification.textContent = message;
-            notification.className = `notification ${type}`;
-            notification.classList.remove('hidden');
-            
-            // Auto-hide after 4 seconds
-            setTimeout(() => {
-                notification.classList.add('hidden');
-            }, 4000);
+            if (notification) {
+                notification.textContent = message;
+                notification.className = `notification ${type}`;
+                notification.classList.remove('hidden');
+                
+                // Auto-hide after 4 seconds
+                setTimeout(() => {
+                    notification.classList.add('hidden');
+                }, 4000);
+            }
         }
 
         // Global function to fetch student data
@@ -60,20 +68,12 @@
                             `QR already used by ${data.used_by} at ${data.used_at}`, 
                             'warning'
                         );
-                        // Restart camera after 3 seconds
-                        setTimeout(() => {
-                            if (window.startCamera) {
-                                window.startCamera();
-                            }
-                        }, 3000);
                     } else {
                         showNotification('Error: ' + data.error, 'error');
-                        // Restart camera after 2 seconds
-                        setTimeout(() => {
-                            if (window.startCamera) {
-                                window.startCamera();
-                            }
-                        }, 2000);
+                    }
+                    // Restart camera after error
+                    if (window.restartCamera) {
+                        window.restartCamera();
                     }
                 } else {
                     // Redirect to result page with student data
@@ -103,12 +103,10 @@
             .catch(error => {
                 console.error('Error:', error);
                 showNotification('Network error occurred', 'error');
-                // Restart camera after 2 seconds
-                setTimeout(() => {
-                    if (window.startCamera) {
-                        window.startCamera();
-                    }
-                }, 2000);
+                // Restart camera after error
+                if (window.restartCamera) {
+                    window.restartCamera();
+                }
             });
         }
     </script>
