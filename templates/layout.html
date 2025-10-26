@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FRESH CHECKS - QR Gate</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Load QR scanner library in head with defer -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js" defer></script>
 </head>
 <body>
     <div class="container">
@@ -24,12 +26,6 @@
 
     <!-- Notification System -->
     <div id="notification" class="notification hidden"></div>
-
-    <!-- Load QR scanner library -->
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
-    
-    <!-- Load our QR handling script -->
-    <script src="{{ url_for('static', filename='js/qr.js') }}"></script>
 
     <script>
         // Global notification function
@@ -72,9 +68,11 @@
                         showNotification('Error: ' + data.error, 'error');
                     }
                     // Restart camera after error
-                    if (window.restartCamera) {
-                        window.restartCamera();
-                    }
+                    setTimeout(() => {
+                        if (window.restartCamera) {
+                            window.restartCamera();
+                        }
+                    }, 2000);
                 } else {
                     // Redirect to result page with student data
                     showNotification('Student found! Loading details...', 'success');
@@ -104,11 +102,17 @@
                 console.error('Error:', error);
                 showNotification('Network error occurred', 'error');
                 // Restart camera after error
-                if (window.restartCamera) {
-                    window.restartCamera();
-                }
+                setTimeout(() => {
+                    if (window.restartCamera) {
+                        window.restartCamera();
+                    }
+                }, 2000);
             });
         }
+
+        // Make functions globally available
+        window.showNotification = showNotification;
+        window.fetchStudentData = fetchStudentData;
     </script>
 </body>
 </html>

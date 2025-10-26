@@ -64,9 +64,6 @@
     </div>
 </div>
 
-<!-- Load the QR scanner library -->
-<script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
-
 <script>
 // QR Scanner functionality
 let html5QrCode = null;
@@ -81,9 +78,23 @@ function updateCameraStatus(message, type = 'info') {
     }
 }
 
+// Check if HTML5 QR Code library is loaded
+function isLibraryLoaded() {
+    if (typeof Html5Qrcode === 'undefined') {
+        updateCameraStatus('❌ QR scanner library not loaded. Please refresh the page.', 'error');
+        return false;
+    }
+    return true;
+}
+
 async function startCamera() {
     if (isScanning) {
         console.log('Camera is already scanning');
+        return;
+    }
+    
+    // Check if library is loaded
+    if (!isLibraryLoaded()) {
         return;
     }
     
@@ -94,20 +105,6 @@ async function startCamera() {
         // Hide start button, show stop button
         document.getElementById('start-camera-btn').style.display = 'none';
         document.getElementById('stop-camera-btn').style.display = 'inline-block';
-        
-        // Test camera access first
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            // Test if we can access camera
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { 
-                    facingMode: { ideal: "environment" } // Prefer rear camera
-                } 
-            });
-            
-            // Stop the test stream
-            stream.getTracks().forEach(track => track.stop());
-            console.log('Camera permission granted');
-        }
         
         // Create scanner instance
         html5QrCode = new Html5Qrcode("qr-reader");
@@ -323,6 +320,9 @@ function handleCameraError(error) {
     } else if (error.message && error.message.includes('No cameras found')) {
         errorMessage = '❌ No camera detected';
         detailedMessage = 'No cameras were found on this device.';
+    } else if (error.message && error.message.includes('Html5Qrcode')) {
+        errorMessage = '❌ QR scanner not loaded';
+        detailedMessage = 'Please refresh the page and try again.';
     } else {
         detailedMessage = error.toString();
     }
@@ -335,66 +335,23 @@ function handleCameraError(error) {
     document.getElementById('switch-camera-btn').style.display = 'none';
 }
 
-// Make sure we have the fetchStudentData function
-if (typeof fetchStudentData === 'undefined') {
-    function fetchStudentData(qrString) {
-        showNotification('Processing QR code...', 'info');
-        
-        fetch('/fetch', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                qr_string: qrString
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                if (data.error === 'QR already used') {
-                    showNotification(
-                        `QR already used by ${data.used_by} at ${data.used_at}`, 
-                        'warning'
-                    );
-                } else {
-                    showNotification('Error: ' + data.error, 'error');
-                }
-                // Restart camera after error
-                restartCamera();
-            } else {
-                // Redirect to result page with student data
-                showNotification('Student found! Loading details...', 'success');
-                
-                // Create a form to submit data to result page
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '/result';
-                
-                const studentDataInput = document.createElement('input');
-                studentDataInput.type = 'hidden';
-                studentDataInput.name = 'student_data';
-                studentDataInput.value = JSON.stringify(data.student_data);
-                
-                const rowIndexInput = document.createElement('input');
-                rowIndexInput.type = 'hidden';
-                rowIndexInput.name = 'row_index';
-                rowIndexInput.value = data.row_index;
-                
-                form.appendChild(studentDataInput);
-                form.appendChild(rowIndexInput);
-                document.body.appendChild(form);
-                form.submit();
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showNotification('Network error occurred', 'error');
-            // Restart camera after error
-            restartCamera();
-        });
+// Make functions globally available
+window.startCamera = startCamera;
+window.stopCamera = stopCamera;
+window.switchCamera = switchCamera;
+window.restartCamera = restartCamera;
+window.handleCameraError = handleCameraError;
+
+// Add library check on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if library is loaded
+    if (typeof Html5Qrcode === 'undefined') {
+        console.warn('HTML5 QR Code library not loaded yet');
+        // It might still load because we use defer, so we'll check again when user clicks
+    } else {
+        console.log('HTML5 QR Code library loaded successfully');
     }
-}
+});
 </script>
 
 <style>
