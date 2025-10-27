@@ -15,11 +15,12 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive.file'
 ]
 
-# Column mapping by position (A=1, B=2, C=3, etc.)
+# Updated Column mapping for sequential columns (no headers)
+# Assuming your columns are in this exact order from left to right
 COLUMN_MAPPING = {
-    'StudentID': 1,      # Column A
-    'StudentName': 2,    # Column B  
-    'ClassRollNo': 3,    # Column C
+    'StudentID': 1,      # Column A - First column
+    'StudentName': 2,    # Column B - Second column  
+    'ClassRollNo': 3,    # Column C - Third column
     'AdmissionDate': 4,  # Column D
     'Section': 5,        # Column E
     'Group': 6,          # Column F
@@ -28,12 +29,12 @@ COLUMN_MAPPING = {
     'FatherName': 9,     # Column I
     'FoodPreference': 10, # Column J
     'Photo': 11,         # Column K
-    'QRCode': 12,        # Column L (or M? Let's check both)
-    'Status': 13,        # Column M (or N?)
-    'Comment': 14,       # Column N (or O?)
-    'LastCheckedTime': 15, # Column O (or P?)
-    'Coordinator': 16,   # Column P (or Q?)
-    'Used': 17           # Column Q (or R?)
+    'QRCode': 12,        # Column L - QR Code column
+    'Status': 13,        # Column M
+    'Comment': 14,       # Column N
+    'LastCheckedTime': 15, # Column O
+    'Coordinator': 16,   # Column P
+    'Used': 17           # Column Q
 }
 
 def decode_credentials():
@@ -106,36 +107,29 @@ def get_cell_value(worksheet, row_index, col_index):
         return ""
 
 def fetch_student_by_qrcode(qr_string):
-    """Fetch student data by QR code using column positions"""
+    """Fetch student data by QR code using sequential column positions (no headers)"""
     try:
         worksheet = get_sheet()
         
-        # Get all data (including header row if it exists)
+        # Get all data - no headers, so all rows are data rows
         all_data = worksheet.get_all_values()
         
         logger.info(f"🔍 SEARCHING FOR QR CODE: '{qr_string}'")
         logger.info(f"Total rows in sheet: {len(all_data)}")
+        logger.info("📋 No headers detected - treating all rows as data")
         
-        # Check if first row looks like headers or data
-        first_row = all_data[0] if all_data else []
-        has_headers = any(header in first_row for header in ['StudentID', 'Student Name', 'Name', 'ID'])
+        # Start from first row (no headers to skip)
+        start_row = 1
         
-        if has_headers:
-            logger.info("📋 Sheet appears to have headers, skipping first row")
-            start_row = 2  # Skip header row
-        else:
-            logger.info("📋 Sheet appears to have no headers, using all rows as data")
-            start_row = 1  # Use all rows including first
-        
-        # Search through all rows
         scanned_code = str(qr_string).strip()
         qr_column = COLUMN_MAPPING['QRCode']  # Column L (12)
         
         logger.info(f"🎯 Searching QR codes in column {qr_column} (L)")
         
+        # Search through all rows starting from first row
         for row_index in range(start_row, len(all_data) + 1):
             try:
-                # Get QR code value from column L
+                # Get QR code value from the specified column
                 record_qr = get_cell_value(worksheet, row_index, qr_column)
                 record_qr_clean = str(record_qr).strip()
                 
@@ -149,26 +143,27 @@ def fetch_student_by_qrcode(qr_string):
                     record_qr_clean.lower() == scanned_code.lower() or
                     record_qr_clean.replace(' ', '') == scanned_code.replace(' ', '')):
                     
-                    # Found match! Get all student data
+                    # Found match! Get all student data using sequential columns
                     student_data = {}
                     for field, col_index in COLUMN_MAPPING.items():
                         student_data[field] = get_cell_value(worksheet, row_index, col_index)
                     
                     logger.info(f"✅ MATCH FOUND at row {row_index}: {student_data.get('StudentName', 'Unknown')}")
+                    logger.info(f"📊 Student Data: {student_data}")
                     return student_data, row_index
                     
             except Exception as e:
                 logger.error(f"Error processing row {row_index}: {str(e)}")
                 continue
         
-        logger.warning(f"❌ QR code '{qr_string}' not found in any of {len(all_data) - start_row + 1} data rows")
+        logger.warning(f"❌ QR code '{qr_string}' not found in any of {len(all_data)} data rows")
         
         # Log sample QR codes for debugging
-        sample_count = min(5, len(all_data) - start_row + 1)
+        sample_count = min(5, len(all_data))
         if sample_count > 0:
             logger.info("📊 Sample QR codes from sheet:")
             for i in range(sample_count):
-                row_idx = start_row + i
+                row_idx = i + 1
                 sample_qr = get_cell_value(worksheet, row_idx, qr_column)
                 logger.info(f"   Row {row_idx}: '{sample_qr}'")
         
@@ -180,7 +175,7 @@ def fetch_student_by_qrcode(qr_string):
         return None, None
 
 def update_student_status_by_row(row_index, status, comment, coordinator):
-    """Update student status using column positions"""
+    """Update student status using sequential column positions"""
     try:
         worksheet = get_sheet()
         
@@ -213,6 +208,7 @@ def update_student_status_by_row(row_index, status, comment, coordinator):
             
             worksheet.batch_update(cells)
             logger.info(f"✅ Updated row {row_index} with: Status='{status}', Comment='{comment}', Coordinator='{coordinator}'")
+            logger.info(f"📝 Update details: {update_data}")
         
         return True
         
@@ -227,7 +223,7 @@ def debug_sheet_structure():
         worksheet = get_sheet()
         all_data = worksheet.get_all_values()
         
-        logger.info("🔍 DEBUG SHEET STRUCTURE:")
+        logger.info("🔍 DEBUG SHEET STRUCTURE (NO HEADERS):")
         logger.info(f"Total rows: {len(all_data)}")
         
         # Show first 3 rows with column indicators
@@ -257,6 +253,12 @@ def debug_sheet_structure():
         else:
             logger.info("No QR codes found in first 5 rows")
         
+        # Show column mapping being used
+        logger.info("Column mapping being used:")
+        for field, col_index in COLUMN_MAPPING.items():
+            col_letter = gspread.utils.rowcol_to_a1(1, col_index)[0]
+            logger.info(f"  {field}: Column {col_letter} (index {col_index})")
+        
         return True
     except Exception as e:
         logger.error(f"Error debugging sheet structure: {str(e)}")
@@ -271,8 +273,33 @@ def test_connection():
         logger.info("✅ Connection test successful!")
         logger.info(f"Sheet title: {worksheet.title}")
         logger.info(f"Total rows: {len(all_data)}")
+        logger.info(f"Column mapping: {len(COLUMN_MAPPING)} columns defined")
         
         return True
     except Exception as e:
         logger.error(f"❌ Connection test failed: {str(e)}")
         return False
+
+def get_column_mapping():
+    """Get the current column mapping for debugging"""
+    return COLUMN_MAPPING
+
+def update_column_mapping(custom_mapping):
+    """Update column mapping if your sheet has different column order"""
+    global COLUMN_MAPPING
+    if isinstance(custom_mapping, dict):
+        COLUMN_MAPPING.update(custom_mapping)
+        logger.info(f"Updated column mapping: {COLUMN_MAPPING}")
+        return True
+    return False
+
+# Example of how to customize column mapping if your columns are in different order:
+# If your columns are in a different order, you can update the mapping like this:
+#
+# CUSTOM_MAPPING = {
+#     'StudentID': 1,      # Your Student ID column
+#     'StudentName': 2,    # Your Student Name column  
+#     'QRCode': 3,         # Your QR Code column (if it's in column C)
+#     # ... etc
+# }
+# update_column_mapping(CUSTOM_MAPPING)

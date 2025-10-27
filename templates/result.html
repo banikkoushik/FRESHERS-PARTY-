@@ -3,6 +3,7 @@
 {% block content %}
 <div class="result-container">
     <div class="card">
+        <!-- Student Header -->
         <div class="student-header">
             <h2>🎓 Student Verification</h2>
             <div class="coordinator-badge">
@@ -10,6 +11,25 @@
             </div>
         </div>
 
+        <!-- Verification Status Indicator -->
+        <div class="verification-status">
+            <div class="status-indicator" id="status-indicator">
+                <span class="status-dot"></span>
+                <span class="status-text" id="status-text">Ready for verification</span>
+            </div>
+            <div class="last-updated" id="last-updated">
+                {% if student_data.LastVerified %}
+                Last verified: {{ student_data.LastVerified }}
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Hidden data storage for safe JavaScript access -->
+        <div id="student-data" style="display: none;">{{ student_data | tojson | safe }}</div>
+        <input type="hidden" id="row-index" value="{{ row_index }}">
+        <input type="hidden" id="coordinator-name" value="{{ coordinator_name }}">
+
+        <!-- Student Information -->
         <div class="student-info">
             <div class="info-grid">
                 <div class="info-item">
@@ -53,117 +73,459 @@
                 <label>📸 Student Photo:</label>
                 <div class="photo-container">
                     {% if student_data.Photo.startswith('http') %}
-                        <img src="{{ student_data.Photo }}" alt="Student Photo" onerror="this.style.display='none'">
+                        <img src="{{ student_data.Photo }}" 
+                             alt="Student Photo" 
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
                     {% else %}
                         <img src="{{ url_for('static', filename='photos/' + student_data.Photo) }}" 
-                             alt="Student Photo" onerror="this.style.display='none'">
+                             alt="Student Photo" 
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
                     {% endif %}
+                    <div class="photo-placeholder" style="display: none;">
+                        <span class="placeholder-icon">📷</span>
+                        <span class="placeholder-text">Photo not available</span>
+                    </div>
                 </div>
             </div>
             {% endif %}
         </div>
 
+        <!-- Action Section -->
         <div class="action-section">
             <h3>📋 Update Verification Status</h3>
-            <p class="section-description">Select the appropriate status for this student</p>
+            <p class="section-description">Select the appropriate status for this student. Each action will log your name as the verifying coordinator.</p>
             
-            <div class="button-grid">
-                <button onclick="updateStatus('Checked', 'Student verified and entered')" class="btn btn-success">
+            <div class="button-grid" id="action-buttons">
+                <button onclick="updateStatus('Checked', 'Student verified and entered')" 
+                        class="btn btn-success"
+                        data-status="Checked">
                     <span class="btn-icon">✅</span>
                     <span class="btn-text">Checked</span>
-                    <span class="btn-desc">Student present</span>
+                    <span class="btn-desc">Student present and verified</span>
                 </button>
                 
-                <button onclick="updateStatus('Problematic', '')" class="btn btn-warning">
+                <button onclick="updateStatus('Problematic', '')" 
+                        class="btn btn-warning"
+                        data-status="Problematic">
                     <span class="btn-icon">⚠️</span>
                     <span class="btn-text">Problematic</span>
                     <span class="btn-desc">Issues with details</span>
                 </button>
                 
-                <button onclick="updateStatus('Suspicious', '')" class="btn btn-danger">
+                <button onclick="updateStatus('Suspicious', '')" 
+                        class="btn btn-danger"
+                        data-status="Suspicious">
                     <span class="btn-icon">🚨</span>
                     <span class="btn-text">Suspicious</span>
                     <span class="btn-desc">Requires attention</span>
                 </button>
                 
-                <button onclick="updateStatus('Absent', 'Student marked absent')" class="btn btn-secondary">
+                <button onclick="updateStatus('Absent', 'Student marked absent')" 
+                        class="btn btn-secondary"
+                        data-status="Absent">
                     <span class="btn-icon">❌</span>
                     <span class="btn-text">Absent</span>
-                    <span class="btn-desc">Not present</span>
+                    <span class="btn-desc">Not present at event</span>
                 </button>
             </div>
 
+            <!-- Comment Section -->
             <div class="comment-section">
-                <label for="comment">📝 Additional Comments:</label>
-                <textarea id="comment" placeholder="Add any specific comments, issues, or notes about this verification..."></textarea>
-                <div class="char-count">0/200 characters</div>
+                <label for="comment">
+                    <span>📝 Additional Comments</span>
+                    <small class="optional-badge">Optional</small>
+                </label>
+                <textarea 
+                    id="comment" 
+                    placeholder="Add any specific comments, issues, or notes about this verification..."
+                    maxlength="200"
+                    aria-label="Additional comments for verification"
+                ></textarea>
+                <div class="char-count">
+                    <span id="char-count">0</span>/200 characters
+                    <span class="char-warning" id="char-warning" style="display: none;">⚠️ Near limit</span>
+                </div>
+                
+                <!-- Quick comment buttons -->
+                <div class="quick-comments">
+                    <small>Quick comments:</small>
+                    <button type="button" class="quick-comment-btn" onclick="addQuickComment('ID verification required')">
+                        ID verification required
+                    </button>
+                    <button type="button" class="quick-comment-btn" onclick="addQuickComment('Food preference mismatch')">
+                        Food preference mismatch
+                    </button>
+                    <button type="button" class="quick-comment-btn" onclick="addQuickComment('Duplicate entry suspected')">
+                        Duplicate entry suspected
+                    </button>
+                    <button type="button" class="quick-comment-btn" onclick="addQuickComment('Details need correction')">
+                        Details need correction
+                    </button>
+                    <button type="button" class="quick-comment-btn" onclick="addQuickComment('Photo does not match')">
+                        Photo does not match
+                    </button>
+                </div>
             </div>
         </div>
 
+        <!-- Navigation Section -->
         <div class="navigation-section">
-            <a href="/scan" class="btn btn-outline">← Scan Another QR</a>
-            <a href="/login" class="btn btn-outline">🔄 New Coordinator Login</a>
+            <a href="/scan" class="btn btn-outline" id="scan-another-btn">
+                ← Scan Another QR
+            </a>
+            <a href="/login" class="btn btn-outline" id="new-login-btn">
+                🔄 New Coordinator Login
+            </a>
         </div>
     </div>
 </div>
 
 <script>
-// Fix for the JavaScript assignment - use proper JSON serialization
-const studentData = JSON.parse('{{ student_data | tojson | safe }}');
-const rowIndex = parseInt('{{ row_index }}');
+// Safe data assignment using hidden elements
+const studentData = JSON.parse(document.getElementById('student-data').textContent);
+const rowIndex = parseInt(document.getElementById('row-index').value);
+const coordinatorName = document.getElementById('coordinator-name').value;
 
-// Character counter for comments
-document.getElementById('comment')?.addEventListener('input', function(e) {
-    const count = e.target.value.length;
-    document.querySelector('.char-count').textContent = `${count}/200 characters`;
+// Get CSRF token from meta tag
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+// State management
+let currentStatus = null;
+let isSubmitting = false;
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    initializePage();
+    setupEventListeners();
+    updateStatusIndicator('ready');
 });
 
-function updateStatus(status, defaultComment) {
-    const comment = document.getElementById('comment').value || defaultComment;
+function initializePage() {
+    console.log('Initializing result page...');
+    console.log('Student Data:', studentData);
+    console.log('Row Index:', rowIndex);
+    console.log('Coordinator:', coordinatorName);
+    
+    // Update last updated time if available
+    if (studentData.LastCheckedTime) {
+        document.getElementById('last-updated').textContent = 
+            `Last verified: ${studentData.LastCheckedTime}`;
+    }
+}
+
+function setupEventListeners() {
+    // Character counter for comments
+    const commentTextarea = document.getElementById('comment');
+    if (commentTextarea) {
+        commentTextarea.addEventListener('input', updateCharCount);
+    }
+    
+    // Keyboard navigation for action buttons
+    setupKeyboardNavigation();
+    
+    // Form submission prevention
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && e.ctrlKey) {
+            e.preventDefault();
+            // Ctrl+Enter to submit with current status
+            if (currentStatus) {
+                updateStatus(currentStatus, document.getElementById('comment').value);
+            }
+        }
+    });
+}
+
+function setupKeyboardNavigation() {
+    const buttons = document.querySelectorAll('.button-grid button');
+    
+    buttons.forEach((button, index) => {
+        button.setAttribute('tabindex', '0');
+        button.addEventListener('keydown', function(e) {
+            // Arrow key navigation
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                const nextButton = buttons[index + 1] || buttons[0];
+                nextButton.focus();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                const prevButton = buttons[index - 1] || buttons[buttons.length - 1];
+                prevButton.focus();
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                this.click();
+            }
+        });
+    });
+}
+
+function updateCharCount() {
+    const textarea = document.getElementById('comment');
+    const count = textarea.value.length;
+    const charCount = document.getElementById('char-count');
+    const charWarning = document.getElementById('char-warning');
+    
+    charCount.textContent = count;
+    
+    if (count > 180) {
+        charWarning.style.display = 'inline';
+        charCount.style.color = '#e53e3e';
+    } else if (count > 150) {
+        charWarning.style.display = 'inline';
+        charCount.style.color = '#ed8936';
+    } else {
+        charWarning.style.display = 'none';
+        charCount.style.color = '#718096';
+    }
+}
+
+function addQuickComment(comment) {
+    const textarea = document.getElementById('comment');
+    const currentText = textarea.value.trim();
+    
+    if (currentText) {
+        // Add semicolon separator if there's existing text
+        textarea.value = currentText + '; ' + comment;
+    } else {
+        textarea.value = comment;
+    }
+    
+    textarea.focus();
+    updateCharCount();
+    
+    // Show confirmation
+    showNotification('Comment added', 'info', 2000);
+}
+
+function updateStatusIndicator(status) {
+    const indicator = document.getElementById('status-indicator');
+    const text = document.getElementById('status-text');
+    
+    if (!indicator || !text) return;
+    
+    switch(status) {
+        case 'ready':
+            text.textContent = 'Ready for verification';
+            indicator.style.borderLeftColor = '#667eea';
+            break;
+        case 'processing':
+            text.textContent = 'Updating status...';
+            indicator.style.borderLeftColor = '#ed8936';
+            break;
+        case 'success':
+            text.textContent = 'Status updated successfully';
+            indicator.style.borderLeftColor = '#48bb78';
+            break;
+        case 'error':
+            text.textContent = 'Update failed';
+            indicator.style.borderLeftColor = '#f56565';
+            break;
+    }
+}
+
+function validateSubmission(status, comment) {
+    const errors = [];
+    
+    // Validate status
+    const validStatuses = ['Checked', 'Problematic', 'Suspicious', 'Absent'];
+    if (!validStatuses.includes(status)) {
+        errors.push('Invalid status selected');
+    }
+    
+    // Validate row index
+    if (isNaN(rowIndex) || rowIndex < 0) {
+        errors.push('Invalid student record');
+    }
+    
+    // Validate coordinator
+    if (!coordinatorName || coordinatorName.trim() === '') {
+        errors.push('Coordinator information missing');
+    }
     
     // Validate comment length
     if (comment.length > 200) {
-        showNotification('Comment too long (max 200 characters)', 'error');
+        errors.push('Comment too long (max 200 characters)');
+    }
+    
+    return {
+        isValid: errors.length === 0,
+        errors: errors
+    };
+}
+
+async function updateStatus(status, defaultComment = '') {
+    if (isSubmitting) {
+        showNotification('Please wait for current operation to complete', 'warning');
         return;
     }
     
+    const commentInput = document.getElementById('comment');
+    const comment = commentInput?.value.trim() || defaultComment;
+    
+    // Store current status for keyboard shortcuts
+    currentStatus = status;
+    
+    // Add confirmation for certain actions
+    if (status === 'Suspicious' || status === 'Absent') {
+        const confirmed = confirm(`Are you sure you want to mark this student as ${status}?`);
+        if (!confirmed) {
+            return;
+        }
+    }
+    
+    // Add confirmation if comment is empty for problematic status
+    if (status === 'Problematic' && !comment) {
+        const addComment = confirm('Recommend adding a comment for problematic cases. Continue without comment?');
+        if (!addComment) {
+            commentInput.focus();
+            return;
+        }
+    }
+    
+    // Validate inputs
+    const validation = validateSubmission(status, comment);
+    if (!validation.isValid) {
+        showNotification('Validation error: ' + validation.errors.join(', '), 'error');
+        return;
+    }
+    
+    // Show loading state
     showNotification('Updating status...', 'info');
+    updateStatusIndicator('processing');
     
     // Disable all buttons during update
-    const buttons = document.querySelectorAll('.button-grid button');
-    buttons.forEach(btn => btn.disabled = true);
+    const buttons = document.querySelectorAll('.button-grid button, .navigation-section .btn');
+    const actionButtons = document.getElementById('action-buttons');
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+        btn.style.cursor = 'not-allowed';
+    });
     
-    fetch('/update', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            row_index: rowIndex,
-            status: status,
-            comment: comment
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
+    // Add loading spinner to the clicked button
+    const event = window.event;
+    const clickedBtn = event?.target.closest('button');
+    if (clickedBtn) {
+        const originalHTML = clickedBtn.innerHTML;
+        clickedBtn.innerHTML = '<div class="spinner-small"></div> Processing...';
+        clickedBtn.dataset.originalHtml = originalHTML;
+    }
+    
+    // Prepare request data
+    const requestData = {
+        row_index: rowIndex,
+        status: status,
+        comment: comment,
+        coordinator_name: coordinatorName,
+        student_id: studentData.StudentID,
+        timestamp: new Date().toISOString(),
+        csrf_token: csrfToken
+    };
+    
+    try {
+        // Send update request
+        const response = await fetch('/update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || `HTTP error! status: ${response.status}`);
+        }
+        
         if (data.success) {
+            // Success handling
+            updateStatusIndicator('success');
             showNotification('✅ Status updated successfully! Redirecting to login...', 'success');
+            
+            // Update UI to reflect the change
+            document.body.style.opacity = '0.9';
+            
+            // Log the action
+            console.log(`Status updated to ${status} for student ${studentData.StudentID}`);
+            
+            // Redirect after delay
             setTimeout(() => {
                 window.location.href = '/login';
-            }, 3000);
+            }, 2000);
+            
         } else {
-            showNotification('❌ Error: ' + (data.error || 'Update failed'), 'error');
-            // Re-enable buttons on error
-            buttons.forEach(btn => btn.disabled = false);
+            throw new Error(data.error || 'Update failed');
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        showNotification('❌ Network error occurred', 'error');
+        
+    } catch (error) {
+        console.error('Update error:', error);
+        
+        let errorMessage = `Error: ${error.message}`;
+        if (error.message.includes('Network')) {
+            errorMessage = 'Network error occurred. Please check your connection.';
+        } else if (error.message.includes('CSRF')) {
+            errorMessage = 'Security validation failed. Please refresh the page.';
+        }
+        
+        showNotification(errorMessage, 'error', 6000);
+        updateStatusIndicator('error');
+        
         // Re-enable buttons on error
-        buttons.forEach(btn => btn.disabled = false);
+        resetButtonStates(buttons, clickedBtn);
+        
+    } finally {
+        isSubmitting = false;
+    }
+}
+
+function resetButtonStates(buttons, clickedBtn = null) {
+    buttons.forEach(btn => {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+    });
+    
+    // Restore original button content
+    if (clickedBtn && clickedBtn.dataset.originalHtml) {
+        clickedBtn.innerHTML = clickedBtn.dataset.originalHtml;
+    }
+}
+
+// Additional utility functions
+function printStudentInfo() {
+    window.print();
+}
+
+function copyStudentDetails() {
+    const details = `
+Student ID: ${studentData.StudentID || 'N/A'}
+Name: ${studentData.StudentName || 'N/A'}
+Roll No: ${studentData.ClassRollNo || 'N/A'}
+Section: ${studentData.Section || 'N/A'}
+Group: ${studentData.Group || 'N/A'}
+Food Preference: ${studentData.FoodPreference || 'N/A'}
+Email: ${studentData.Email || 'N/A'}
+Mobile: ${studentData.Mobile || 'N/A'}
+    `.trim();
+    
+    navigator.clipboard.writeText(details).then(() => {
+        showNotification('Student details copied to clipboard', 'success', 2000);
+    }).catch(() => {
+        showNotification('Failed to copy details', 'error');
     });
 }
+
+// Make functions available globally for debugging
+window.studentData = studentData;
+window.copyStudentDetails = copyStudentDetails;
+window.printStudentInfo = printStudentInfo;
+
+// Session timeout warning
+setTimeout(() => {
+    showNotification('Session will expire soon. Complete verification soon.', 'warning', 10000);
+}, 25 * 60 * 1000); // 25 minutes
 </script>
 
 <style>
@@ -177,7 +539,7 @@ function updateStatus(status, defaultComment) {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 30px;
+    margin-bottom: 20px;
     padding-bottom: 20px;
     border-bottom: 2px solid #e2e8f0;
 }
@@ -194,6 +556,49 @@ function updateStatus(status, defaultComment) {
     border-radius: 25px;
     font-size: 14px;
     font-weight: 600;
+}
+
+/* Verification Status Styles */
+.verification-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding: 15px 20px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #48bb78;
+    animation: pulse 2s infinite;
+}
+
+.status-text {
+    font-weight: 600;
+    color: #2d3748;
+    font-size: 14px;
+}
+
+.last-updated {
+    font-size: 12px;
+    color: #718096;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
 }
 
 .student-info {
@@ -278,12 +683,30 @@ function updateStatus(status, defaultComment) {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
 }
 
 .photo-container img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+}
+
+.photo-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: #718096;
+}
+
+.placeholder-icon {
+    font-size: 32px;
+}
+
+.placeholder-text {
+    font-size: 12px;
+    text-align: center;
 }
 
 .action-section {
@@ -306,6 +729,7 @@ function updateStatus(status, defaultComment) {
     color: #718096;
     margin-bottom: 20px;
     font-size: 14px;
+    line-height: 1.5;
 }
 
 .button-grid {
@@ -327,11 +751,17 @@ function updateStatus(status, defaultComment) {
     gap: 8px;
     background: white;
     border: 2px solid transparent;
+    min-height: 100px;
 }
 
 .button-grid button:hover:not(:disabled) {
     transform: translateY(-3px);
     box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+}
+
+.button-grid button:focus {
+    outline: 2px solid #667eea;
+    outline-offset: 2px;
 }
 
 .button-grid button:disabled {
@@ -431,6 +861,54 @@ function updateStatus(status, defaultComment) {
     font-size: 12px;
     color: #718096;
     margin-top: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.char-warning {
+    color: #ed8936;
+    font-weight: 600;
+}
+
+.quick-comments {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.quick-comments small {
+    display: block;
+    margin-bottom: 8px;
+    color: #718096;
+    font-weight: 600;
+}
+
+.quick-comment-btn {
+    background: #edf2f7;
+    border: 1px solid #cbd5e0;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 11px;
+    margin: 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #4a5568;
+}
+
+.quick-comment-btn:hover {
+    background: #e2e8f0;
+    border-color: #a0aec0;
+}
+
+.optional-badge {
+    background: #e2e8f0;
+    color: #4a5568;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    margin-left: 8px;
+    font-weight: normal;
 }
 
 .navigation-section {
@@ -444,12 +922,46 @@ function updateStatus(status, defaultComment) {
 .navigation-section .btn {
     flex: 1;
     justify-content: center;
+    min-height: 50px;
 }
 
+/* Print Styles */
+@media print {
+    .action-section,
+    .navigation-section,
+    .verification-status,
+    .coordinator-badge,
+    .quick-comments {
+        display: none !important;
+    }
+    
+    .card {
+        box-shadow: none;
+        border: 1px solid #ccc;
+    }
+    
+    .student-info {
+        background: white !important;
+        border: 1px solid #ccc !important;
+    }
+    
+    body {
+        background: white;
+        color: black;
+    }
+}
+
+/* Responsive Design */
 @media (max-width: 768px) {
     .student-header {
         flex-direction: column;
         gap: 15px;
+        text-align: center;
+    }
+    
+    .verification-status {
+        flex-direction: column;
+        gap: 10px;
         text-align: center;
     }
     
@@ -468,6 +980,138 @@ function updateStatus(status, defaultComment) {
     .photo-container {
         width: 120px;
         height: 120px;
+    }
+    
+    .action-section,
+    .student-info {
+        padding: 20px;
+    }
+    
+    .quick-comments {
+        text-align: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .result-container {
+        padding: 5px;
+    }
+    
+    .card {
+        padding: 15px;
+    }
+    
+    .student-info,
+    .action-section {
+        padding: 15px;
+        margin: 20px 0;
+    }
+    
+    .info-grid {
+        gap: 15px;
+    }
+    
+    .button-grid {
+        gap: 10px;
+    }
+    
+    .button-grid button {
+        padding: 15px 10px;
+        min-height: 80px;
+    }
+    
+    .coordinator-badge {
+        font-size: 12px;
+        padding: 8px 12px;
+    }
+    
+    .quick-comment-btn {
+        font-size: 10px;
+        padding: 4px 8px;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .student-info,
+    .action-section {
+        border: 2px solid #000;
+    }
+    
+    .info-value {
+        border: 1px solid #000;
+    }
+    
+    .button-grid button {
+        border: 2px solid;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .button-grid button:hover {
+        transform: none;
+    }
+    
+    .status-dot {
+        animation: none;
+    }
+    
+    * {
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Focus styles for accessibility */
+button:focus-visible,
+.btn:focus-visible {
+    outline: 2px solid #667eea;
+    outline-offset: 2px;
+}
+
+/* Loading state enhancements */
+.spinner-small {
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #667eea;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .card {
+        background: #2d3748;
+        color: #e2e8f0;
+    }
+    
+    .info-value {
+        background: #4a5568;
+        color: #e2e8f0;
+        border-color: #718096;
+    }
+    
+    .student-info {
+        background: #4a5568;
+        border-color: #718096;
+    }
+    
+    .action-section {
+        background: #2d5c3f;
+        border-color: #48bb78;
+    }
+    
+    .quick-comment-btn {
+        background: #4a5568;
+        color: #e2e8f0;
+        border-color: #718096;
     }
 }
 </style>

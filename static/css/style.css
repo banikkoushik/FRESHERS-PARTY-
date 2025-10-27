@@ -928,6 +928,16 @@ body {
     margin: 0 auto;
 }
 
+.spinner-small {
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #667eea;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
@@ -958,5 +968,347 @@ textarea:focus {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
+    }
+}
+
+/* New Styles for Enhanced Features */
+
+/* Verification Status Indicator */
+.verification-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #48bb78;
+    animation: pulse 2s infinite;
+}
+
+.status-text {
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.last-updated {
+    font-size: 12px;
+    color: #718096;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* Quick Comments */
+.quick-comments {
+    margin-top: 10px;
+}
+
+.quick-comments small {
+    display: block;
+    margin-bottom: 8px;
+    color: #718096;
+    font-weight: 600;
+}
+
+.quick-comment-btn {
+    background: #edf2f7;
+    border: 1px solid #cbd5e0;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    margin: 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.quick-comment-btn:hover {
+    background: #e2e8f0;
+}
+
+.char-warning {
+    color: #ed8936;
+    font-weight: 600;
+    margin-left: 10px;
+}
+
+/* Optional Badge */
+.optional-badge {
+    background: #e2e8f0;
+    color: #4a5568;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    margin-left: 8px;
+}
+
+/* Coordinator Grid */
+.coordinator-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 15px 0;
+}
+
+.coordinator-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+}
+
+.coordinator-name {
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.coordinator-id {
+    color: #667eea;
+    font-weight: 600;
+    font-family: monospace;
+}
+
+/* Input Hints */
+.input-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #718096;
+}
+
+/* Scanner Wrapper for jsQR */
+.scanner-wrapper {
+    position: relative;
+    width: 100%;
+    min-height: 300px;
+    border: 2px dashed #cbd5e0;
+    border-radius: 12px;
+    margin: 15px 0;
+    background: #f7fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.video-element {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+}
+
+.canvas-element {
+    display: none;
+}
+
+.scanning-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.scan-box {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 250px;
+    height: 250px;
+    border: 3px solid #48bb78;
+    border-radius: 12px;
+    box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.3);
+    animation: pulse 2s infinite;
+}
+
+/* Permission Help Section */
+.permission-help {
+    background: #fffaf0;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 4px solid #ed8936;
+    margin: 20px 0;
+}
+
+.permission-help h4 {
+    color: #744210;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.permission-help ul {
+    color: #744210;
+    padding-left: 20px;
+    margin: 0;
+}
+
+.permission-help li {
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+.permission-help strong {
+    color: #744210;
+}
+
+/* Scan Feedback */
+.scan-feedback {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(72, 187, 120, 0.9);
+    color: white;
+    padding: 20px 30px;
+    border-radius: 10px;
+    font-weight: 600;
+    z-index: 10;
+    animation: fadeOut 2s ease-in-out forwards;
+}
+
+@keyframes fadeOut {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* Button States */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* Enhanced Mobile Styles */
+@media (max-width: 768px) {
+    .coordinator-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .verification-status {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+    
+    .scanner-wrapper {
+        min-height: 250px;
+    }
+    
+    .scan-box {
+        width: 200px;
+        height: 200px;
+    }
+    
+    .btn {
+        min-height: 54px;
+    }
+}
+
+@media (max-width: 480px) {
+    .coordinator-item {
+        flex-direction: column;
+        gap: 4px;
+        text-align: center;
+    }
+    
+    .quick-comments {
+        text-align: center;
+    }
+    
+    .quick-comment-btn {
+        font-size: 10px;
+        padding: 6px 8px;
+    }
+}
+
+/* Notification Close Button */
+.notification {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    color: white;
+    margin-left: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    opacity: 0.8;
+}
+
+.notification-close:hover {
+    opacity: 1;
+}
+
+/* Form Validation Styles */
+.input-error {
+    border-color: #f56565 !important;
+    box-shadow: 0 0 0 3px rgba(245, 101, 101, 0.1) !important;
+}
+
+.error-message {
+    color: #f56565;
+    font-size: 12px;
+    margin-top: 4px;
+    display: block;
+}
+
+/* Success States */
+.input-success {
+    border-color: #48bb78 !important;
+    box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.1) !important;
+}
+
+/* Focus visible for keyboard navigation */
+.btn:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid #667eea;
+    outline-offset: 2px;
+}
+
+/* Dark mode support (optional) */
+@media (prefers-color-scheme: dark) {
+    .card {
+        background: #2d3748;
+        color: #e2e8f0;
+    }
+    
+    .info-value {
+        background: #4a5568;
+        color: #e2e8f0;
+        border-color: #718096;
+    }
+    
+    .student-info,
+    .action-section {
+        background: #4a5568;
+        border-color: #718096;
     }
 }

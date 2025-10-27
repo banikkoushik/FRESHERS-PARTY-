@@ -1,10 +1,14 @@
-<!DOCTYPE html>
+                                                              <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="description" content="FRESH CHECKS - QR Registration System for College Freshers Party">
+    <meta name="theme-color" content="#667eea">
     <title>FRESH CHECKS - QR Gate</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
 </head>
 <body>
     <div class="container">
@@ -23,97 +27,373 @@
     </div>
 
     <!-- Notification System -->
-    <div id="notification" class="notification hidden"></div>
+    <div id="notification" class="notification hidden">
+        <span id="notification-message"></span>
+        <button id="notification-close" class="notification-close" onclick="hideNotification()">✕</button>
+    </div>
 
     <!-- Load jsQR library -->
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 
     <script>
-        // Global notification function
-        function showNotification(message, type = 'info') {
+        // CSRF Token management
+        function getCSRFToken() {
+            const metaTag = document.querySelector('meta[name="csrf-token"]');
+            return metaTag ? metaTag.getAttribute('content') : '';
+        }
+
+        // Enhanced notification function
+        function showNotification(message, type = 'info', duration = 4000) {
+            const notification = document.getElementById('notification');
+            const messageEl = document.getElementById('notification-message');
+            const closeBtn = document.getElementById('notification-close');
+            
+            if (!notification || !messageEl) return;
+            
+            // Clear existing timeouts
+            if (notification.timeoutId) {
+                clearTimeout(notification.timeoutId);
+            }
+            
+            // Set message and type
+            messageEl.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.classList.remove('hidden');
+            
+            // Auto-hide if duration is set and positive
+            if (duration > 0) {
+                notification.timeoutId = setTimeout(() => {
+                    hideNotification();
+                }, duration);
+            } else {
+                // For persistent notifications, clear any existing timeout
+                notification.timeoutId = null;
+            }
+            
+            // Log for debugging
+            console.log(`Notification [${type}]: ${message}`);
+        }
+
+        function hideNotification() {
             const notification = document.getElementById('notification');
             if (notification) {
-                notification.textContent = message;
-                notification.className = `notification ${type}`;
-                notification.classList.remove('hidden');
-                
-                // Auto-hide after 4 seconds
-                setTimeout(() => {
-                    notification.classList.add('hidden');
-                }, 4000);
+                notification.classList.add('hidden');
+                if (notification.timeoutId) {
+                    clearTimeout(notification.timeoutId);
+                    notification.timeoutId = null;
+                }
             }
         }
 
-        // Global function to fetch student data
+        // Global error handling
+        function handleGlobalErrors() {
+            window.addEventListener('error', function(e) {
+                console.error('Global error:', e.error);
+                // Don't show notification for network errors or common expected errors
+                if (!e.message.includes('Loading') && !e.message.includes('Script error')) {
+                    showNotification('An unexpected error occurred', 'error');
+                }
+            });
+            
+            window.addEventListener('unhandledrejection', function(e) {
+                console.error('Unhandled promise rejection:', e.reason);
+                showNotification('An unexpected error occurred', 'error');
+                e.preventDefault();
+            });
+        }
+
+        // Network status monitoring
+        function setupNetworkMonitoring() {
+            window.addEventListener('online', () => {
+                showNotification('Connection restored', 'success', 3000);
+            });
+
+            window.addEventListener('offline', () => {
+                showNotification('You are offline - some features may not work', 'warning', 0);
+            });
+
+            // Initial check
+            if (!navigator.onLine) {
+                showNotification('You appear to be offline', 'warning', 5000);
+            }
+        }
+
+        // Session timeout warning
+        function setupSessionWarning() {
+            const sessionTimeout = 30 * 60 * 1000; // 30 minutes
+            const warningTime = 5 * 60 * 1000; // 5 minutes warning
+            
+            setTimeout(() => {
+                if (window.location.pathname !== '/login') {
+                    showNotification('Session will expire in 5 minutes. Please save your work.', 'warning', 0);
+                }
+            }, sessionTimeout - warningTime);
+        }
+
+        // Enhanced fetchStudentData function
         function fetchStudentData(qrString) {
             showNotification('Processing QR code...', 'info');
+            
+            // Add loading state to buttons if available
+            const startBtn = document.getElementById('start-camera-btn');
+            const originalStartText = startBtn?.innerHTML;
+            if (startBtn) {
+                startBtn.innerHTML = '<div class="spinner-small"></div> Processing...';
+                startBtn.disabled = true;
+            }
+            
+            const stopBtn = document.getElementById('stop-camera-btn');
+            if (stopBtn) {
+                stopBtn.disabled = true;
+            }
             
             fetch('/fetch', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCSRFToken(),
+                    'X-Requested-With': 'XMLHttpRequest'
                 },
                 body: JSON.stringify({
-                    qr_string: qrString
+                    qr_string: qrString,
+                    timestamp: new Date().toISOString()
                 })
             })
-            .then(response => response.json())
+            .then(async response => {
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.error) {
                     if (data.error === 'QR already used') {
                         showNotification(
                             `QR already used by ${data.used_by} at ${data.used_at}`, 
-                            'warning'
+                            'warning',
+                            6000
                         );
                     } else {
-                        showNotification('Error: ' + data.error, 'error');
+                        showNotification('Error: ' + data.error, 'error', 5000);
                     }
-                    // Restart camera after error
-                    setTimeout(() => {
-                        if (window.restartCamera) {
-                            window.restartCamera();
-                        }
-                    }, 2000);
+                    restartCamera();
                 } else {
-                    // Redirect to result page with student data
-                    showNotification('Student found! Loading details...', 'success');
-                    
-                    // Create a form to submit data to result page
-                    const form = document.createElement('form');
-                    form.method = 'POST';
-                    form.action = '/result';
-                    
-                    const studentDataInput = document.createElement('input');
-                    studentDataInput.type = 'hidden';
-                    studentDataInput.name = 'student_data';
-                    studentDataInput.value = JSON.stringify(data.student_data);
-                    
-                    const rowIndexInput = document.createElement('input');
-                    rowIndexInput.type = 'hidden';
-                    rowIndexInput.name = 'row_index';
-                    rowIndexInput.value = data.row_index;
-                    
-                    form.appendChild(studentDataInput);
-                    form.appendChild(rowIndexInput);
-                    document.body.appendChild(form);
-                    form.submit();
+                    showNotification('Student found! Loading details...', 'success', 3000);
+                    redirectToResultPage(data);
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                showNotification('Network error occurred', 'error');
-                // Restart camera after error
-                setTimeout(() => {
-                    if (window.restartCamera) {
-                        window.restartCamera();
-                    }
-                }, 2000);
+                console.error('Fetch error:', error);
+                
+                let errorMessage = 'Network error occurred';
+                if (error.message.includes('Failed to fetch')) {
+                    errorMessage = 'Network connection failed. Please check your internet.';
+                } else if (error.message.includes('HTTP error')) {
+                    errorMessage = 'Server error occurred. Please try again.';
+                }
+                
+                showNotification(errorMessage, 'error', 5000);
+                restartCamera();
+            })
+            .finally(() => {
+                // Restore button states
+                if (startBtn && originalStartText) {
+                    startBtn.innerHTML = originalStartText;
+                    startBtn.disabled = false;
+                }
+                if (stopBtn) {
+                    stopBtn.disabled = false;
+                }
             });
+        }
+
+        function redirectToResultPage(data) {
+            // Create a form to submit data to result page
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/result';
+            form.style.display = 'none';
+            
+            const studentDataInput = document.createElement('input');
+            studentDataInput.type = 'hidden';
+            studentDataInput.name = 'student_data';
+            studentDataInput.value = JSON.stringify(data.student_data);
+            
+            const rowIndexInput = document.createElement('input');
+            rowIndexInput.type = 'hidden';
+            rowIndexInput.name = 'row_index';
+            rowIndexInput.value = data.row_index;
+            
+            // Add CSRF token
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = getCSRFToken();
+            
+            form.appendChild(studentDataInput);
+            form.appendChild(rowIndexInput);
+            form.appendChild(csrfInput);
+            document.body.appendChild(form);
+            
+            // Submit the form
+            form.submit();
+        }
+
+        // Input validation utilities
+        function validateCoordinatorInput(name, coordinatorId) {
+            const errors = [];
+            
+            if (!name || name.trim().length === 0) {
+                errors.push('Name is required');
+            } else if (name.length > 50) {
+                errors.push('Name is too long');
+            } else if (!/^[A-Za-z\s]+$/.test(name)) {
+                errors.push('Name can only contain letters and spaces');
+            }
+            
+            if (!coordinatorId || coordinatorId.trim().length === 0) {
+                errors.push('Coordinator ID is required');
+            } else if (coordinatorId.length > 20) {
+                errors.push('Coordinator ID is too long');
+            } else if (!/^[A-Z0-9]+$/.test(coordinatorId)) {
+                errors.push('Coordinator ID can only contain uppercase letters and numbers');
+            }
+            
+            return {
+                isValid: errors.length === 0,
+                errors: errors,
+                cleanName: name ? name.trim() : '',
+                cleanId: coordinatorId ? coordinatorId.trim().toUpperCase() : ''
+            };
+        }
+
+        function sanitizeQRInput(qrString) {
+            if (typeof qrString !== 'string') {
+                throw new Error('Invalid QR code format');
+            }
+            
+            // Trim and limit length
+            const cleanString = qrString.trim().slice(0, 1000);
+            
+            if (cleanString.length === 0) {
+                throw new Error('Empty QR code');
+            }
+            
+            // Remove potentially dangerous characters (basic sanitization)
+            const sanitized = cleanString.replace(/[<>]/g, '');
+            
+            return sanitized;
+        }
+
+        // Keyboard navigation helper
+        function setupKeyboardNavigation() {
+            document.addEventListener('keydown', function(e) {
+                // Escape key to hide notification
+                if (e.key === 'Escape') {
+                    hideNotification();
+                }
+                
+                // Ctrl+Alt+L to focus on login form (if on login page)
+                if (e.ctrlKey && e.altKey && e.key === 'l') {
+                    const nameInput = document.getElementById('name');
+                    if (nameInput) {
+                        e.preventDefault();
+                        nameInput.focus();
+                    }
+                }
+            });
+        }
+
+        // Focus management for accessibility
+        function setupFocusManagement() {
+            // Focus on main content for screen readers
+            const mainContent = document.querySelector('.main-content');
+            if (mainContent) {
+                mainContent.setAttribute('tabindex', '-1');
+                mainContent.focus();
+            }
+        }
+
+        // Performance monitoring
+        function setupPerformanceMonitoring() {
+            // Log page load performance
+            window.addEventListener('load', () => {
+                if ('performance' in window) {
+                    const perfData = performance.timing;
+                    const loadTime = perfData.loadEventEnd - perfData.navigationStart;
+                    console.log(`Page loaded in ${loadTime}ms`);
+                    
+                    if (loadTime > 3000) {
+                        console.warn('Slow page load detected');
+                    }
+                }
+            });
+        }
+
+        // Initialize all global functionality
+        function initializeGlobalFeatures() {
+            handleGlobalErrors();
+            setupNetworkMonitoring();
+            setupKeyboardNavigation();
+            setupFocusManagement();
+            setupPerformanceMonitoring();
+            
+            // Only setup session warning if user is authenticated
+            if (document.body.querySelector('.coordinator-badge') || 
+                window.location.pathname !== '/login') {
+                setupSessionWarning();
+            }
+            
+            console.log('FRESH CHECKS - Global features initialized');
         }
 
         // Make functions globally available
         window.showNotification = showNotification;
+        window.hideNotification = hideNotification;
         window.fetchStudentData = fetchStudentData;
+        window.redirectToResultPage = redirectToResultPage;
+        window.validateCoordinatorInput = validateCoordinatorInput;
+        window.sanitizeQRInput = sanitizeQRInput;
+        window.getCSRFToken = getCSRFToken;
+
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeGlobalFeatures);
+        } else {
+            initializeGlobalFeatures();
+        }
+
+        // Service Worker registration (optional - for PWA)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(function(registration) {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch(function(registrationError) {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+            });
+        }
+
+        // Page visibility handling for performance
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') {
+                // Page became visible
+                console.log('Page is visible');
+            } else {
+                // Page became hidden
+                console.log('Page is hidden');
+            }
+        });
+
+        // Prevent form resubmission on page refresh
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, null, window.location.href);
+        }
     </script>
+
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>

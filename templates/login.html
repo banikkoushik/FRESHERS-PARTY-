@@ -11,34 +11,363 @@
         </div>
         {% endif %}
         
-        <form method="POST" class="login-form">
+        <form method="POST" class="login-form" id="login-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
             <div class="form-group">
-                <label for="name">Coordinator Name:</label>
-                <input type="text" id="name" name="name" required 
-                       placeholder="Enter your name" autocomplete="off">
+                <label for="name">
+                    Coordinator Name:
+                    <span class="optional-badge">Required</span>
+                </label>
+                <input type="text" 
+                       id="name" 
+                       name="name" 
+                       required 
+                       placeholder="Enter your full name"
+                       autocomplete="username"
+                       minlength="2" 
+                       maxlength="50" 
+                       pattern="[A-Za-z\s]+"
+                       aria-describedby="name-hint">
+                <small class="input-hint" id="name-hint">
+                    Letters and spaces only (2-50 characters)
+                </small>
+                <span class="error-message" id="name-error"></span>
             </div>
             
             <div class="form-group">
-                <label for="coordinator_id">Coordinator ID:</label>
-                <input type="password" id="coordinator_id" name="coordinator_id" required 
-                       placeholder="Enter your coordinator ID" autocomplete="off">
+                <label for="coordinator_id">
+                    Coordinator ID:
+                    <span class="optional-badge">Required</span>
+                </label>
+                <input type="password" 
+                       id="coordinator_id" 
+                       name="coordinator_id" 
+                       required 
+                       placeholder="Enter your coordinator ID"
+                       autocomplete="current-password"
+                       minlength="6" 
+                       maxlength="20" 
+                       pattern="[A-Z0-9]+"
+                       aria-describedby="id-hint">
+                <small class="input-hint" id="id-hint">
+                    Uppercase letters and numbers only (6-20 characters)
+                </small>
+                <span class="error-message" id="id-error"></span>
             </div>
             
-            <button type="submit" class="btn btn-primary">Login</button>
+            <button type="submit" class="btn btn-primary" id="login-btn">
+                <span class="btn-text">Login</span>
+                <div class="spinner-small" style="display: none;"></div>
+            </button>
         </form>
         
         <div class="coordinator-info">
-            <h3>Authorized Coordinators:</h3>
+            <h3>👥 Authorized Coordinators</h3>
+            <div class="coordinator-grid">
+                <div class="coordinator-item">
+                    <span class="coordinator-name">Soumya</span>
+                    <span class="coordinator-id">PCE001</span>
+                </div>
+                <div class="coordinator-item">
+                    <span class="coordinator-name">Ankit</span>
+                    <span class="coordinator-id">PCE002</span>
+                </div>
+                <div class="coordinator-item">
+                    <span class="coordinator-name">Riya</span>
+                    <span class="coordinator-id">PCE003</span>
+                </div>
+                <div class="coordinator-item">
+                    <span class="coordinator-name">Devraj</span>
+                    <span class="coordinator-id">PCE004</span>
+                </div>
+            </div>
+            <p class="note">🔒 Contact admin to update coordinator list</p>
+        </div>
+
+        <div class="security-notice">
+            <h4>🔐 Security Notice</h4>
             <ul>
-                <li><strong>Soumya</strong> - PCE001</li>
-                <li><strong>Ankit</strong> - PCE002</li>
-                <li><strong>Riya</strong> - PCE003</li>
-                <li><strong>Devraj</strong> - PCE004</li>
+                <li>Keep your coordinator ID confidential</li>
+                <li>Log out after each scanning session</li>
+                <li>Do not share login credentials</li>
+                <li>Report any suspicious activity immediately</li>
             </ul>
-            <p class="note">Contact admin to update coordinator list</p>
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const loginForm = document.getElementById('login-form');
+    const loginBtn = document.getElementById('login-btn');
+    const btnText = loginBtn.querySelector('.btn-text');
+    const spinner = loginBtn.querySelector('.spinner-small');
+    
+    const nameInput = document.getElementById('name');
+    const idInput = document.getElementById('coordinator_id');
+    const nameError = document.getElementById('name-error');
+    const idError = document.getElementById('id-error');
+
+    // Input validation and sanitization
+    function setupInputValidation() {
+        // Name input validation
+        nameInput.addEventListener('input', function(e) {
+            // Only allow letters and spaces
+            this.value = this.value.replace(/[^A-Za-z\s]/g, '');
+            
+            // Validate and show errors
+            validateName();
+        });
+
+        // ID input validation
+        idInput.addEventListener('input', function(e) {
+            // Convert to uppercase and only allow letters and numbers
+            this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            
+            // Validate and show errors
+            validateID();
+        });
+
+        // Real-time validation on blur
+        nameInput.addEventListener('blur', validateName);
+        idInput.addEventListener('blur', validateID);
+    }
+
+    function validateName() {
+        const value = nameInput.value.trim();
+        nameError.textContent = '';
+
+        if (!value) {
+            nameError.textContent = 'Name is required';
+            nameInput.classList.add('input-error');
+            return false;
+        }
+
+        if (value.length < 2) {
+            nameError.textContent = 'Name must be at least 2 characters';
+            nameInput.classList.add('input-error');
+            return false;
+        }
+
+        if (value.length > 50) {
+            nameError.textContent = 'Name must be less than 50 characters';
+            nameInput.classList.add('input-error');
+            return false;
+        }
+
+        if (!/^[A-Za-z\s]+$/.test(value)) {
+            nameError.textContent = 'Name can only contain letters and spaces';
+            nameInput.classList.add('input-error');
+            return false;
+        }
+
+        nameInput.classList.remove('input-error');
+        nameInput.classList.add('input-success');
+        return true;
+    }
+
+    function validateID() {
+        const value = idInput.value.trim();
+        idError.textContent = '';
+
+        if (!value) {
+            idError.textContent = 'Coordinator ID is required';
+            idInput.classList.add('input-error');
+            return false;
+        }
+
+        if (value.length < 6) {
+            idError.textContent = 'ID must be at least 6 characters';
+            idInput.classList.add('input-error');
+            return false;
+        }
+
+        if (value.length > 20) {
+            idError.textContent = 'ID must be less than 20 characters';
+            idInput.classList.add('input-error');
+            return false;
+        }
+
+        if (!/^[A-Z0-9]+$/.test(value)) {
+            idError.textContent = 'ID can only contain uppercase letters and numbers';
+            idInput.classList.add('input-error');
+            return false;
+        }
+
+        idInput.classList.remove('input-error');
+        idInput.classList.add('input-success');
+        return true;
+    }
+
+    function validateForm() {
+        const isNameValid = validateName();
+        const isIDValid = validateID();
+        return isNameValid && isIDValid;
+    }
+
+    // Form submission handling
+    function setupFormSubmission() {
+        loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            if (!validateForm()) {
+                showNotification('Please fix the errors in the form', 'error');
+                return;
+            }
+
+            // Show loading state
+            btnText.textContent = 'Logging in...';
+            spinner.style.display = 'inline-block';
+            loginBtn.disabled = true;
+
+            // Clear any previous errors
+            nameError.textContent = '';
+            idError.textContent = '';
+
+            // Create form data
+            const formData = new FormData(loginForm);
+
+            // Add timestamp for security
+            formData.append('timestamp', new Date().toISOString());
+
+            // Submit via fetch for better error handling
+            fetch('/login', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRF-Token': getCSRFToken(),
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(async response => {
+                if (response.redirected) {
+                    // Successful login - redirect
+                    window.location.href = response.url;
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Login failed');
+                }
+
+                return response.text();
+            })
+            .then(html => {
+                // If we get here, login failed (no redirect)
+                if (html.includes('Invalid Name or ID')) {
+                    throw new Error('Invalid Name or ID');
+                }
+                // Should have redirected, so this is an error
+                throw new Error('Unexpected response from server');
+            })
+            .catch(error => {
+                console.error('Login error:', error);
+                
+                let errorMessage = 'Login failed. Please try again.';
+                if (error.message.includes('Invalid Name or ID')) {
+                    errorMessage = 'Invalid Name or Coordinator ID';
+                } else if (error.message.includes('Network')) {
+                    errorMessage = 'Network error. Please check your connection.';
+                }
+
+                showNotification(errorMessage, 'error', 5000);
+                
+                // Reset form state
+                resetFormState();
+            });
+
+            // Safety timeout - re-enable form after 10 seconds
+            setTimeout(() => {
+                if (loginBtn.disabled) {
+                    console.warn('Login timeout - re-enabling form');
+                    resetFormState();
+                    showNotification('Login timeout. Please try again.', 'warning');
+                }
+            }, 10000);
+        });
+    }
+
+    function resetFormState() {
+        btnText.textContent = 'Login';
+        spinner.style.display = 'none';
+        loginBtn.disabled = false;
+    }
+
+    // Keyboard shortcuts
+    function setupKeyboardShortcuts() {
+        document.addEventListener('keydown', function(e) {
+            // Ctrl+Enter to submit form
+            if (e.ctrlKey && e.key === 'Enter') {
+                e.preventDefault();
+                loginForm.requestSubmit();
+            }
+
+            // Focus on next field on Enter (except in textarea)
+            if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+                e.preventDefault();
+                const formElements = Array.from(loginForm.elements);
+                const currentIndex = formElements.indexOf(e.target);
+                if (currentIndex < formElements.length - 1) {
+                    formElements[currentIndex + 1].focus();
+                }
+            }
+        });
+
+        // Auto-focus on name field
+        if (nameInput && !nameInput.value) {
+            setTimeout(() => {
+                nameInput.focus();
+            }, 100);
+        }
+    }
+
+    // Password visibility toggle (optional enhancement)
+    function setupPasswordToggle() {
+        const passwordContainer = idInput.parentElement;
+        const toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.innerHTML = '👁️';
+        toggleBtn.className = 'password-toggle';
+        toggleBtn.setAttribute('aria-label', 'Toggle password visibility');
+        
+        toggleBtn.addEventListener('click', function() {
+            const isPassword = idInput.type === 'password';
+            idInput.type = isPassword ? 'text' : 'password';
+            toggleBtn.innerHTML = isPassword ? '🙈' : '👁️';
+            toggleBtn.setAttribute('aria-label', 
+                isPassword ? 'Hide password' : 'Show password');
+        });
+
+        passwordContainer.style.position = 'relative';
+        toggleBtn.style.position = 'absolute';
+        toggleBtn.style.right = '10px';
+        toggleBtn.style.top = '50%';
+        toggleBtn.style.transform = 'translateY(-50%)';
+        toggleBtn.style.background = 'none';
+        toggleBtn.style.border = 'none';
+        toggleBtn.style.cursor = 'pointer';
+        toggleBtn.style.fontSize = '16px';
+        
+        passwordContainer.appendChild(toggleBtn);
+    }
+
+    // Initialize all features
+    function initializeLoginPage() {
+        setupInputValidation();
+        setupFormSubmission();
+        setupKeyboardShortcuts();
+        
+        // Optional: Uncomment to enable password visibility toggle
+        // setupPasswordToggle();
+
+        console.log('Login page initialized');
+    }
+
+    initializeLoginPage();
+});
+</script>
 
 <style>
 .login-container {
@@ -46,6 +375,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    min-height: 70vh;
 }
 
 .login-form {
@@ -54,6 +384,7 @@
 
 .form-group {
     margin-bottom: 20px;
+    position: relative;
 }
 
 .form-group label {
@@ -61,6 +392,9 @@
     margin-bottom: 8px;
     font-weight: 600;
     color: #4a5568;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .form-group input {
@@ -71,12 +405,23 @@
     font-size: 16px;
     transition: all 0.3s ease;
     background: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .form-group input:focus {
     outline: none;
     border-color: #667eea;
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-group input.input-error {
+    border-color: #f56565;
+    box-shadow: 0 0 0 3px rgba(245, 101, 101, 0.1);
+}
+
+.form-group input.input-success {
+    border-color: #48bb78;
+    box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.1);
 }
 
 .btn-primary {
@@ -91,11 +436,19 @@
     cursor: pointer;
     transition: all 0.3s ease;
     margin-top: 10px;
+    position: relative;
+    min-height: 50px;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.btn-primary:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none !important;
 }
 
 .coordinator-info {
@@ -104,34 +457,53 @@
     border-radius: 8px;
     border-left: 4px solid #667eea;
     margin-top: 20px;
+    margin-bottom: 20px;
 }
 
 .coordinator-info h3 {
     margin-bottom: 15px;
     color: #2d3748;
     font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.coordinator-info ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
+.coordinator-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 15px 0;
 }
 
-.coordinator-info li {
-    padding: 8px 0;
-    color: #4a5568;
-    border-bottom: 1px solid #e2e8f0;
+.coordinator-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s ease;
 }
 
-.coordinator-info li:last-child {
-    border-bottom: none;
+.coordinator-item:hover {
+    border-color: #667eea;
+    transform: translateY(-1px);
 }
 
-.coordinator-info li strong {
+.coordinator-name {
+    font-weight: 600;
     color: #2d3748;
-    display: inline-block;
-    width: 80px;
+}
+
+.coordinator-id {
+    color: #667eea;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+    background: #f7fafc;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
 }
 
 .note {
@@ -139,6 +511,9 @@
     color: #718096;
     margin-top: 10px;
     font-style: italic;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .alert {
@@ -155,14 +530,178 @@
     border-color: #feb2b2;
 }
 
+.optional-badge {
+    background: #e2e8f0;
+    color: #4a5568;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: normal;
+}
+
+.input-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #718096;
+}
+
+.error-message {
+    display: block;
+    color: #f56565;
+    font-size: 12px;
+    margin-top: 4px;
+    font-weight: 500;
+}
+
+.security-notice {
+    background: #fffaf0;
+    padding: 15px 20px;
+    border-radius: 8px;
+    border-left: 4px solid #ed8936;
+    margin-top: 20px;
+}
+
+.security-notice h4 {
+    color: #744210;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.security-notice ul {
+    color: #744210;
+    padding-left: 20px;
+    margin: 0;
+    font-size: 13px;
+}
+
+.security-notice li {
+    margin-bottom: 5px;
+    line-height: 1.4;
+}
+
+/* Password toggle button */
+.password-toggle {
+    background: none !important;
+    border: none !important;
+    padding: 8px !important;
+    margin: 0 !important;
+    min-height: auto !important;
+    transform: translateY(-50%) !important;
+}
+
+.password-toggle:hover {
+    background: #f7fafc !important;
+    border-radius: 4px !important;
+}
+
+/* Responsive design */
 @media (max-width: 768px) {
+    .login-container {
+        padding: 10px;
+        min-height: 60vh;
+    }
+    
     .card {
-        margin: 10px;
+        margin: 0;
         padding: 20px;
     }
     
-    .coordinator-info li strong {
-        width: 70px;
+    .coordinator-info {
+        padding: 15px;
+    }
+    
+    .coordinator-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .coordinator-item {
+        flex-direction: column;
+        gap: 4px;
+        text-align: center;
+    }
+    
+    .form-group input {
+        padding: 14px 12px;
+        font-size: 16px; /* Prevents zoom on iOS */
+    }
+    
+    .security-notice {
+        padding: 12px 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .login-container {
+        padding: 5px;
+    }
+    
+    .card {
+        padding: 15px;
+    }
+    
+    .coordinator-info {
+        padding: 12px;
+    }
+    
+    .security-notice {
+        padding: 10px 12px;
+    }
+    
+    .security-notice ul {
+        padding-left: 15px;
+    }
+    
+    .btn-primary {
+        padding: 16px;
+        min-height: 54px;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .coordinator-item {
+        border: 2px solid #000;
+    }
+    
+    .form-group input {
+        border: 2px solid #000;
+    }
+    
+    .btn-primary {
+        border: 2px solid #000;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .coordinator-item:hover {
+        transform: none;
+    }
+    
+    .btn-primary:hover {
+        transform: none;
+    }
+    
+    * {
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Print styles */
+@media print {
+    .security-notice,
+    .coordinator-info,
+    .btn-primary {
+        display: none !important;
+    }
+    
+    .card {
+        box-shadow: none;
+        border: 1px solid #ccc;
     }
 }
 </style>
